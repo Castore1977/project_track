@@ -103,12 +103,12 @@ const getDetailedChanges = (current, previous) => {
 };
 
 // Componenti React
-const DeleteConfirmModal = ({ onConfirm, onCancel }) => {
+const DeleteConfirmModal = ({ onConfirm, onCancel, message }) => {
   return (
     <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50">
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm w-full text-center">
         <h3 className="text-xl font-bold mb-4">Conferma Eliminazione</h3>
-        <p className="mb-6">Sei sicuro di voler eliminare questo motore? Questa azione è irreversibile.</p>
+        <p className="mb-6">{message}</p>
         <div className="flex justify-center gap-4">
           <button onClick={onCancel} className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Annulla</button>
           <button onClick={onConfirm} className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Conferma</button>
@@ -118,10 +118,20 @@ const DeleteConfirmModal = ({ onConfirm, onCancel }) => {
   );
 };
 
-const Timeline = ({ versions, onShowDetails }) => {
+const Timeline = ({ versions, onShowDetails, onDeleteVersion }) => {
   return (
     <div className="space-y-8 mt-8">
-      <h3 className="text-2xl font-bold mb-4">Cronologia delle Versioni</h3>
+      <div className="flex justify-between items-center">
+        <h3 className="text-2xl font-bold">Cronologia delle Versioni</h3>
+        {versions.length > 1 && (
+          <button 
+            onClick={onDeleteVersion} 
+            className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm"
+          >
+            Elimina Ultima Versione
+          </button>
+        )}
+      </div>
       {versions.slice().reverse().map((version, index) => {
         const previousVersionIndex = versions.length - 2 - index;
         const previousVersion = previousVersionIndex >= 0 ? versions[previousVersionIndex] : null;
@@ -414,6 +424,7 @@ const App = () => {
   const [changeDetails, setChangeDetails] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingVersion, setIsDeletingVersion] = useState(false);
   const [engineToDeleteId, setEngineToDeleteId] = useState(null);
 
   const resetFormState = () => {
@@ -513,19 +524,46 @@ const App = () => {
 
   const handleDeleteEngineConfirm = (engineId) => {
     setEngineToDeleteId(engineId);
+    setIsDeletingVersion(false);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteVersionConfirm = () => {
+    setIsDeletingVersion(true);
     setShowDeleteConfirm(true);
   };
   
   const handleConfirmDelete = () => {
-    setEngines(prevEngines => prevEngines.filter(engine => engine.id !== engineToDeleteId));
-    setSelectedEngine(null);
+    if (isDeletingVersion) {
+      setEngines(prevEngines => prevEngines.map(engine => {
+        if (engine.id === selectedEngine.id) {
+          const newVersions = engine.versions.slice(0, -1);
+          const newLatestVersion = newVersions[newVersions.length - 1];
+          if (newLatestVersion) {
+            loadEngineData({ versions: newVersions });
+          } else {
+            // If no versions are left, clear all data and unselect engine
+            resetFormState();
+            setSelectedEngine(null);
+          }
+          return { ...engine, versions: newVersions };
+        }
+        return engine;
+      }));
+      
+    } else {
+      setEngines(prevEngines => prevEngines.filter(engine => engine.id !== engineToDeleteId));
+      setSelectedEngine(null);
+    }
     setShowDeleteConfirm(false);
     setEngineToDeleteId(null);
+    setIsDeletingVersion(false);
   };
   
   const handleCancelDelete = () => {
     setShowDeleteConfirm(false);
     setEngineToDeleteId(null);
+    setIsDeletingVersion(false);
   };
 
   // Import and Export functions
@@ -599,7 +637,13 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans p-6 flex flex-col lg:flex-row gap-6">
-      {showDeleteConfirm && <DeleteConfirmModal onConfirm={handleConfirmDelete} onCancel={handleCancelDelete} />}
+      {showDeleteConfirm && (
+        <DeleteConfirmModal 
+          onConfirm={handleConfirmDelete} 
+          onCancel={handleCancelDelete} 
+          message={isDeletingVersion ? 'Sei sicuro di voler eliminare l\'ultima versione? Questa azione ripristinerà il motore allo stato precedente.' : 'Sei sicuro di voler eliminare questo motore? Questa azione è irreversibile.'}
+        />
+      )}
       <div className="lg:w-1/4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
         <h2 className="text-2xl font-bold mb-4">Motori di Rischio</h2>
         <div className="flex flex-col space-y-2 mb-4">
@@ -735,7 +779,11 @@ const App = () => {
               </div>
             )}
             {timelineView === 'list' && !isEditing ? (
-              <Timeline versions={selectedEngine.versions} onShowDetails={handleViewDetails} />
+              <Timeline 
+                versions={selectedEngine.versions} 
+                onShowDetails={handleViewDetails} 
+                onDeleteVersion={handleDeleteVersionConfirm} 
+              />
             ) : timelineView === 'gantt' && !isEditing ? (
               <GanttTimeline engines={engines} selectedEngine={selectedEngine} onShowDetails={handleViewDetails} onSelectEngine={handleSelectEngine} />
             ) : (
