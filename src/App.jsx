@@ -172,8 +172,8 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onSelectEngine 
     targetEngines.forEach(engine => {
       engine.versions.forEach((version, index) => {
         const versionDate = new Date(version.timestamp);
-        if (versionDate.toDateString() === date.toDateString() && index > 0) {
-          const previousVersion = engine.versions[index - 1];
+        if (versionDate.toDateString() === date.toDateString()) { // Changed from index > 0
+          const previousVersion = index > 0 ? engine.versions[index - 1] : null;
           versions.push({
             engineId: engine.id,
             engineName: engine.name,
@@ -630,7 +630,7 @@ const App = () => {
                 type="text"
                 value={newEngineName}
                 onChange={(e) => setNewEngineName(e.target.value)}
-                className="w-full p-2 border rounded-lg bg-gray-50 dark:bg-gray-700 dark:border-gray-600"
+                className="w-full p-2 border rounded-lg bg-gray-500 dark:bg-gray-700 dark:border-gray-600"
               />
             </div>
             <div className="mb-4">
@@ -638,7 +638,7 @@ const App = () => {
               <textarea
                 value={newEngineDesc}
                 onChange={(e) => setNewEngineDesc(e.target.value)}
-                className="w-full p-2 border rounded-lg bg-gray-50 dark:bg-gray-700 dark:border-gray-600 h-24"
+                className="w-full p-2 border rounded-lg bg-gray-500 dark:bg-gray-700 dark:border-gray-600 h-24"
               />
             </div>
             <button
@@ -682,7 +682,7 @@ const App = () => {
                     type="date"
                     value={changeValidityDate}
                     onChange={(e) => setChangeValidityDate(e.target.value)}
-                    className="w-full p-2 border rounded-lg bg-gray-50 dark:bg-gray-700 dark:border-gray-600"
+                    className="w-full p-2 border rounded-lg bg-gray-500 dark:bg-gray-700 dark:border-gray-600"
                   />
                 </div>
                 <div className="flex gap-2">
