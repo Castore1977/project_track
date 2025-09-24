@@ -238,7 +238,7 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onSelectEngine 
                   key={modIndex} 
                   onClick={() => onShowDetails(mod.version.data, mod.previousVersion.data)} 
                   className={`w-full text-center text-xs mt-1 p-1 rounded-lg text-white cursor-pointer hover:opacity-80 transition-opacity ${getEngineColor(mod.engineName)}`}
-                  title={mod.engineName}
+                  title={`${mod.engineName} - Valido da: ${mod.version.validityDate || 'Non specificato'}`}
                 >
                   {mod.engineName.substring(0, 3)}
                 </div>
