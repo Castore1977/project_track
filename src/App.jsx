@@ -154,8 +154,15 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onSelectEngine 
   startDate.setDate(today.getDate() - 60);
 
   const dates = [];
+  const months = {};
   for (let d = new Date(startDate); d <= today; d.setDate(d.getDate() + 1)) {
-    dates.push(new Date(d));
+    const date = new Date(d);
+    dates.push(date);
+    const monthYear = `${date.getFullYear()}-${date.getMonth()}`;
+    if (!months[monthYear]) {
+      months[monthYear] = { count: 0, year: date.getFullYear(), month: date.toLocaleString('default', { month: 'long' }) };
+    }
+    months[monthYear].count++;
   }
 
   const getVersionsByDate = (date) => {
@@ -200,6 +207,13 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onSelectEngine 
       </div>
 
       <div className="flex w-full min-w-[768px]">
+        {Object.values(months).map((month, index) => (
+          <div key={index} className="text-center font-bold text-lg text-gray-700 dark:text-gray-300 border-b border-gray-400" style={{ flexBasis: `${month.count * 32}px`, minWidth: `${month.count * 32}px` }}>
+            {month.month} {month.year}
+          </div>
+        ))}
+      </div>
+      <div className="flex w-full min-w-[768px]">
         {dates.map((date, index) => (
           <div key={index} className="flex-1 text-center font-semibold text-sm text-gray-500 min-w-[32px]">{date.getDate()}</div>
         ))}
@@ -221,6 +235,7 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onSelectEngine 
     </div>
   );
 };
+
 
 const ChangeDetailsModal = ({ changes, onClose }) => {
   if (!changes) return null;
@@ -435,13 +450,16 @@ const App = () => {
             versionId: crypto.randomUUID(),
             timestamp: new Date().toISOString(),
             data: newEngineData,
-            validityDate: changeValidityDate,
+            validityDate: changeValidityDate || undefined,
           };
           updatedVersions.push(newVersion);
         } else {
           const latestVersion = updatedVersions[updatedVersions.length - 1];
           if (latestVersion) {
             latestVersion.data = newEngineData;
+            if (changeValidityDate) {
+              latestVersion.validityDate = changeValidityDate;
+            }
           }
         }
         return { ...engine, versions: updatedVersions };
@@ -594,7 +612,18 @@ const App = () => {
       <div className="flex-1 p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
         {isCreating ? (
           <div>
-            <h2 className="text-2xl font-bold mb-4">Nuovo Motore</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold">Nuovo Motore</h2>
+              <button
+                onClick={() => {
+                  setIsCreating(false);
+                  resetFormState();
+                }}
+                className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+              >
+                Indietro
+              </button>
+            </div>
             <div className="mb-4">
               <label className="block text-sm font-semibold mb-2">Nome Motore</label>
               <input
@@ -617,15 +646,6 @@ const App = () => {
               className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors mr-2"
             >
               Salva Motore
-            </button>
-            <button
-              onClick={() => {
-                setIsCreating(false);
-                resetFormState();
-              }}
-              className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-            >
-              Annulla
             </button>
           </div>
         ) : selectedEngine ? (
@@ -668,6 +688,10 @@ const App = () => {
                 <div className="flex gap-2">
                   <button onClick={() => handleUpdateEngine(true)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Salva con tracciamento</button>
                   <button onClick={() => handleUpdateEngine(false)} className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg">Salva senza tracciamento</button>
+                  <button onClick={() => {
+                      setIsEditing(false);
+                      setSelectedEngine(null);
+                  }} className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Indietro</button>
                 </div>
               </div>
             )}
