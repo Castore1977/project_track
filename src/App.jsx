@@ -12,6 +12,7 @@ const App = () => {
   const [newEngineDesc, setNewEngineDesc] = useState('');
   const [statisticalEngines, setStatisticalEngines] = useState([]);
   const [externalEngines, setExternalEngines] = useState([]);
+  const [applicationRules, setApplicationRules] = useState([]); // New state for application rules
   const [universe, setUniverse] = useState({});
   const [kpis, setKpis] = useState([]);
   const [changeValidityDate, setChangeValidityDate] = useState('');
@@ -28,6 +29,7 @@ const App = () => {
     setNewEngineDesc('');
     setStatisticalEngines([]);
     setExternalEngines([]);
+    setApplicationRules([]);
     setUniverse({});
     setKpis([]);
     setChangeValidityDate('');
@@ -38,6 +40,7 @@ const App = () => {
     if (latestVersion && latestVersion.data) {
       setStatisticalEngines(latestVersion.data.statisticalEngines || []);
       setExternalEngines(latestVersion.data.externalEngines || []);
+      setApplicationRules(latestVersion.data.applicationRules || []); // Load new rules
       setUniverse(latestVersion.data.universe || {});
       setKpis(latestVersion.data.kpis || []);
     }
@@ -64,6 +67,7 @@ const App = () => {
         data: {
           statisticalEngines: statisticalEngines,
           externalEngines: externalEngines,
+          applicationRules: applicationRules, // Add new rules to data
           universe: universe,
           kpis: kpis,
         },
@@ -83,6 +87,7 @@ const App = () => {
         const newEngineData = {
           statisticalEngines,
           externalEngines,
+          applicationRules, // Add new rules to data
           universe,
           kpis,
         };
@@ -324,6 +329,8 @@ const App = () => {
                 setStatisticalEngines={setStatisticalEngines}
                 externalEngines={externalEngines}
                 setExternalEngines={setExternalEngines}
+                applicationRules={applicationRules} // Pass new rules
+                setApplicationRules={setApplicationRules} // Pass new rules setter
                 universe={universe}
                 setUniverse={setUniverse}
                 kpis={kpis}
@@ -377,16 +384,19 @@ const compareArrayChanges = (currentArray, previousArray, sectionName, uniqueKey
 const getChangesSummary = (current, previous) => {
   const changes = [];
 
+  // Check for changes in universe
+  if (JSON.stringify(current.universe) !== JSON.stringify(previous.universe)) {
+    changes.push('Modificato: Universo di Applicazione');
+  }
+
   // Check for changes in statistical engines
   changes.push(...compareArrayChanges(current.statisticalEngines, previous.statisticalEngines, 'Motore Statistico'));
   
   // Check for changes in external engines
   changes.push(...compareArrayChanges(current.externalEngines, previous.externalEngines, 'Motore Esterno'));
 
-  // Check for changes in universe
-  if (JSON.stringify(current.universe) !== JSON.stringify(previous.universe)) {
-    changes.push('Modificato: Universo di Applicazione');
-  }
+  // Check for changes in application rules
+  changes.push(...compareArrayChanges(current.applicationRules, previous.applicationRules, 'Regola di Applicazione'));
 
   // Check for changes in KPIs
   changes.push(...compareArrayChanges(current.kpis, previous.kpis, 'KPI'));
@@ -428,15 +438,18 @@ const getDetailedChanges = (current, previous) => {
       }
     }
   };
-
-  compareArrays(current.statisticalEngines, previous.statisticalEngines, 'Motore Statistico', 'name');
-  compareArrays(current.externalEngines, previous.externalEngines, 'Motore Esterno', 'name');
-  compareArrays(current.kpis, previous.kpis, 'KPI', 'name');
   
+  // Compare universe first
   if (JSON.stringify(current.universe) !== JSON.stringify(previous.universe)) {
     details.push({ type: 'modificato', name: 'Universo di Applicazione', section: 'Universo', changes: { description: { before: previous.universe.description, after: current.universe.description } } });
   }
 
+  // Compare other arrays
+  compareArrays(current.statisticalEngines, previous.statisticalEngines, 'Motore Statistico', 'name');
+  compareArrays(current.externalEngines, previous.externalEngines, 'Motore Esterno', 'name');
+  compareArrays(current.applicationRules, previous.applicationRules, 'Regole di Applicazione', 'name'); // Compare new rules
+  compareArrays(current.kpis, previous.kpis, 'KPI', 'name');
+  
   return details;
 };
 
@@ -529,9 +542,15 @@ const ChangeDetailsModal = ({ changes, onClose }) => {
   );
 };
 
-const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngines, setExternalEngines, universe, setUniverse, kpis, setKpis, isEditing, addEntry, updateEntry, deleteEntry }) => {
+const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngines, setExternalEngines, applicationRules, setApplicationRules, universe, setUniverse, kpis, setKpis, isEditing, addEntry, updateEntry, deleteEntry }) => {
   return (
     <div className="space-y-8 mt-8">
+      {/* Sezione Universo di Applicazione (now first) */}
+      <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <h3 className="text-xl font-bold mb-4">Universo di Applicazione</h3>
+        <textarea value={universe.description || ''} onChange={(e) => setUniverse({ description: e.target.value })} disabled={!isEditing} className="w-full p-2 border rounded-lg bg-gray-50 dark:bg-gray-700 dark:border-gray-600 h-24"></textarea>
+      </div>
+
       {/* Sezione Motore Statistico */}
       <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
         <div className="flex justify-between items-center mb-4">
@@ -569,17 +588,30 @@ const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngi
           ))}
         </div>
       </div>
-
-      {/* Sezione Universo di Applicazione */}
-      <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-        <h3 className="text-xl font-bold mb-4">Universo di Applicazione</h3>
-        <textarea value={universe.description || ''} onChange={(e) => setUniverse({ description: e.target.value })} disabled={!isEditing} className="w-full p-2 border rounded-lg bg-gray-50 dark:bg-gray-700 dark:border-gray-600 h-24"></textarea>
-      </div>
-
-      {/* Sezione KPI */}
+      
+      {/* Sezione Regole di Applicazione (NEW) */}
       <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-bold">KPI e Impatto</h3>
+          <h3 className="text-xl font-bold">Regole di Applicazione</h3>
+          {isEditing && <button onClick={() => addEntry(setApplicationRules, { name: '', description: '' })} className="bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-gray-100 py-1 px-3 rounded-lg text-sm">+</button>}
+        </div>
+        <div className="space-y-4">
+          {applicationRules.map((rule, index) => (
+            <div key={index} className="p-3 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-600">
+              <label className="block text-sm font-semibold mb-1">Nome Regola</label>
+              <input type="text" value={rule.name} onChange={(e) => updateEntry(setApplicationRules, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-gray-50 dark:bg-gray-700 dark:border-gray-600" />
+              <label className="block text-sm font-semibold mt-2 mb-1">Dettagli</label>
+              <textarea value={rule.description} onChange={(e) => updateEntry(setApplicationRules, index, 'description', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-gray-50 dark:bg-gray-700 dark:border-gray-600 h-24"></textarea>
+              {isEditing && <button onClick={() => deleteEntry(setApplicationRules, index)} className="mt-2 text-red-500 text-sm">Rimuovi</button>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Sezione KPI (renamed) */}
+      <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-bold">KPI</h3>
           {isEditing && <button onClick={() => addEntry(setKpis, { name: '', calculation: '', impact: '' })} className="bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-gray-100 py-1 px-3 rounded-lg text-sm">+</button>}
         </div>
         <div className="space-y-4">
