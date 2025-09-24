@@ -181,8 +181,9 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onSelectEngine 
 
     targetEngines.forEach(engine => {
       engine.versions.forEach((version, index) => {
-        const versionDate = new Date(version.timestamp);
-        if (versionDate.toDateString() === date.toDateString()) {
+        // Usa la data di validità se esiste, altrimenti usa la data di creazione
+        const timelineDate = version.validityDate ? new Date(version.validityDate) : new Date(version.timestamp);
+        if (timelineDate.toDateString() === date.toDateString()) {
           const previousVersion = index > 0 ? engine.versions[index - 1] : null;
           versions.push({
             engineId: engine.id,
@@ -765,7 +766,7 @@ const App = () => {
       {isModalOpen && (
         <ChangeDetailsModal changes={changeDetails} onClose={closeModal} />
       )}
-    </div>
+      </div>
   );
 };
 
