@@ -26,8 +26,10 @@ const compareArrayChanges = (currentArray, previousArray, sectionName, uniqueKey
   return changes;
 };
 
-const getChangesSummary = (current, previous) => {
+const getChangesSummary = (currentVersion, previousVersion) => {
   const changes = [];
+  const current = currentVersion.data;
+  const previous = previousVersion.data;
 
   // Check for changes in statistical engines
   changes.push(...compareArrayChanges(current.statisticalEngines, previous.statisticalEngines, 'Motore Statistico'));
@@ -42,6 +44,11 @@ const getChangesSummary = (current, previous) => {
 
   // Check for changes in KPIs
   changes.push(...compareArrayChanges(current.kpis, previous.kpis, 'KPI'));
+
+  // Check for changes in validity date
+  if (currentVersion.validityDate !== previousVersion.validityDate) {
+    changes.push(`Modificata data di validità da ${previousVersion.validityDate || 'non definita'} a ${currentVersion.validityDate || 'non definita'}`);
+  }
 
   return changes.length > 0 ? changes : ['Nessuna modifica tracciata.'];
 };
@@ -115,7 +122,7 @@ const Timeline = ({ versions, onShowDetails }) => {
       {versions.slice().reverse().map((version, index) => {
         const previousVersionIndex = versions.length - 2 - index;
         const previousVersion = previousVersionIndex >= 0 ? versions[previousVersionIndex] : null;
-        const changes = previousVersion ? getChangesSummary(version.data, previousVersion.data) : ['Versione iniziale del motore.'];
+        const changes = previousVersion ? getChangesSummary(version, previousVersion) : ['Versione iniziale del motore.'];
 
         return (
           <div key={version.versionId} className="relative pl-6">
@@ -172,7 +179,7 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onSelectEngine 
     targetEngines.forEach(engine => {
       engine.versions.forEach((version, index) => {
         const versionDate = new Date(version.timestamp);
-        if (versionDate.toDateString() === date.toDateString()) { // Changed from index > 0
+        if (versionDate.toDateString() === date.toDateString()) {
           const previousVersion = index > 0 ? engine.versions[index - 1] : null;
           versions.push({
             engineId: engine.id,
@@ -224,7 +231,12 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onSelectEngine 
           return (
             <div key={index} className="flex-1 flex flex-col items-center justify-start p-1 border-r border-gray-200 dark:border-gray-600 min-w-[32px] min-h-[100px] gap-1">
               {mods.map((mod, modIndex) => (
-                <div key={modIndex} onClick={() => onShowDetails(mod.version.data, mod.previousVersion.data)} className={`w-full text-center text-xs mt-1 p-1 rounded-lg text-white cursor-pointer hover:opacity-80 transition-opacity ${getEngineColor(mod.engineName)}`}>
+                <div 
+                  key={modIndex} 
+                  onClick={() => onShowDetails(mod.version.data, mod.previousVersion.data)} 
+                  className={`w-full text-center text-xs mt-1 p-1 rounded-lg text-white cursor-pointer hover:opacity-80 transition-opacity ${getEngineColor(mod.engineName)}`}
+                  title={getChangesSummary(mod.version, mod.previousVersion).join('\n')}
+                >
                   {mod.engineName.substring(0, 3)}
                 </div>
               ))}
@@ -235,7 +247,6 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onSelectEngine 
     </div>
   );
 };
-
 
 const ChangeDetailsModal = ({ changes, onClose }) => {
   if (!changes) return null;
