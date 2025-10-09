@@ -168,7 +168,7 @@ const getDetailedChanges = (current, previous) => {
   compareArrays(currentData.externalEngines, previousData.externalEngines, 'Motore Esterno', 'name');
   compareArrays(currentData.logicDetails, previousData.logicDetails, 'Logica del Motore', 'name');
   compareArrays(currentData.kpis, previousData.kpis, 'Impatto', 'name');
-  compareArrays(currentData.documentation, previousData.documentation, 'Documentazione', 'name');
+  compareArrays(currentData.documentation, currentData.documentation, 'Documentazione', 'name');
 
   return details;
 };
@@ -1094,6 +1094,15 @@ const App = () => {
   
   const deleteEntry = (setter, index) => setter(prev => prev.filter((_, i) => i !== index));
 
+  // Nuova funzione per navigare alla cronologia (pulizia dello stato)
+  const handleViewTimeline = () => {
+    setSelectedEngine(null);
+    setIsCreating(false);
+    setIsEditing(false);
+    resetFormState(); // Puliamo i dati del form di modifica/creazione
+  };
+
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -1185,6 +1194,14 @@ const App = () => {
           >
             Esporta in JSON
           </button>
+          {/* NUOVO PULSANTE: Visualizza Cronologia/Modifiche */}
+          <button
+            onClick={handleViewTimeline}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-lg hover:shadow-xl"
+            title="Visualizza la cronologia di tutte le versioni dei motori"
+          >
+            Visualizza Cronologia
+          </button>
         </div>
         <h3 className="text-xl font-semibold mb-2">Lista Motori ({engines.length})</h3>
         <ul className="space-y-2 overflow-y-auto pr-2 flex-grow">
@@ -1216,22 +1233,17 @@ const App = () => {
             <div className="flex flex-wrap justify-between items-center mb-6 border-b pb-4 dark:border-gray-700">
               <h2 className="text-3xl font-extrabold text-gray-800 dark:text-gray-100">{isCreating ? 'Nuovo Motore' : selectedEngine.name}</h2>
               <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
-                  {/* PULSANTE AGGIORNATO */}
+                  {/* PULSANTE AGGIORNATO: Ora il pulsante è solo per "Visualizza Cronologia" */}
                   {(isEditing || isCreating) && (
                       <button
                           onClick={() => {
                               setIsEditing(false);
                               setIsCreating(false);
-                              // Se selezionato, ricarica i dati per garantire coerenza se l'utente annulla
-                              if (selectedEngine) {
-                                  loadEngineData(selectedEngine);
-                              } else {
-                                  resetFormState();
-                              }
+                              // Non ricarichiamo i dati qui, ma lasciamo che il click su handleViewTimeline li pulisca
                           }}
                           className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm shadow-md"
                       >
-                          Visualizza Cronologia
+                          Annulla Modifica
                       </button>
                   )}
                   {/* PULSANTI DI GESTIONE MOTORE */}
