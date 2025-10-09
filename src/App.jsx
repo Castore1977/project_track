@@ -26,34 +26,53 @@ const compareArrayChanges = (currentArray, previousArray, sectionName, uniqueKey
   return changes;
 };
 
+// Funzione di riepilogo modificata per essere più concisa
 const getChangesSummary = (currentVersion, previousVersion) => {
-  const changes = [];
+  const allChanges = [];
+
+  const summarizeChanges = (currentArray, previousArray, sectionName) => {
+      const changes = compareArrayChanges(currentArray, previousArray, sectionName);
+      if (changes.length > 0) {
+          const added = changes.filter(c => c.startsWith('Aggiunto')).length;
+          const removed = changes.filter(c => c.startsWith('Rimosso')).length;
+          const modified = changes.filter(c => c.startsWith('Modificato')).length;
+
+          let summary = '';
+          if (added > 0) summary += `Aggiunti: ${added} ${sectionName}${added > 1 ? 's' : ''}. `;
+          if (removed > 0) summary += `Rimossi: ${removed} ${sectionName}${removed > 1 ? 's' : ''}. `;
+          if (modified > 0) summary += `Modificati: ${modified} ${sectionName}${modified > 1 ? 's' : ''}. `;
+          
+          if (summary) allChanges.push(summary.trim());
+      }
+  };
+
   const current = currentVersion.data;
   const previous = previousVersion.data;
 
-  // Controlla le modifiche nell'universo
+  // 1. Universo di Applicazione
   if (JSON.stringify(current.universe) !== JSON.stringify(previous.universe)) {
-    changes.push('Modificato: Universo di Applicazione');
+    allChanges.push('Modificato: Universo di Applicazione.');
   }
   
-  // Controlla le modifiche nei motori statistici
-  changes.push(...compareArrayChanges(current.statisticalEngines, previous.statisticalEngines, 'Motore Statistico'));
+  // 2. Motori statistici
+  summarizeChanges(current.statisticalEngines, previous.statisticalEngines, 'Motore Statistico');
   
-  // Controlla le modifiche nei motori esterni
-  changes.push(...compareArrayChanges(current.externalEngines, previous.externalEngines, 'Motore Esterno'));
+  // 3. Motori esterni
+  summarizeChanges(current.externalEngines, previous.externalEngines, 'Motore Esterno');
 
-  // Controlla le modifiche nelle logiche del motore
-  changes.push(...compareArrayChanges(current.logicDetails, previous.logicDetails, 'Logica del Motore'));
+  // 4. Logiche del motore
+  summarizeChanges(current.logicDetails, previous.logicDetails, 'Logica');
 
-  // Controlla le modifiche negli impatti
-  changes.push(...compareArrayChanges(current.kpis, previous.kpis, 'Impatto'));
+  // 5. Impatti (KPI)
+  summarizeChanges(current.kpis, previous.kpis, 'Impatto (KPI)');
 
-  // Controlla le modifiche nella data di validità
+  // 6. Data di validità (prioritaria)
   if (currentVersion.validityDate !== previousVersion.validityDate) {
-    changes.push(`Modificata data di validità da ${previousVersion.validityDate || 'non definita'} a ${currentVersion.validityDate || 'non definita'}`);
+    allChanges.unshift(`Data di validità: ${previousVersion.validityDate || 'non definita'} -> ${currentVersion.validityDate || 'non definita'}`);
   }
 
-  return changes.length > 0 ? changes : ['Nessuna modifica tracciata.'];
+  // Se ci sono modifiche, restituisce un riepilogo conciso, altrimenti 'Nessuna modifica'
+  return allChanges.length > 0 ? allChanges : ['Nessuna modifica tracciata.'];
 };
 
 const getDetailedChanges = (current, previous) => {
@@ -181,7 +200,7 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
                         return (
                             <div 
                                 key={version.versionId} 
-                                className={`p-4 rounded-lg shadow-md transition-transform flex items-start space-x-4 
+                                className={`p-4 rounded-lg shadow-md cursor-pointer transition-transform flex flex-col space-y-2 
                                             ${isLatestVersionOfEngine && filterEngineId !== version.engineId ? 'ring-2 ring-purple-400' : ''}
                                             ${engineColorClass} bg-opacity-10 dark:bg-opacity-20`}
                                 // Gestione del click per i dettagli
@@ -191,38 +210,41 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
                                     }
                                 }}
                             >
-                                <div className={`w-3 h-3 rounded-full ${engineColorClass} flex-shrink-0 mt-1.5`}></div>
-                                <div className="flex-1">
-                                    <div className="flex justify-between items-start">
+                                <div className="flex justify-between items-center w-full">
+                                    <div className="flex items-center space-x-3">
+                                        <div className={`w-3 h-3 rounded-full ${engineColorClass} flex-shrink-0`}></div>
                                         <h4 className={`font-semibold text-lg ${engineColorClass.replace('bg-', 'text-')}`}>
                                             {version.engineName} - Versione {version.versionIndex + 1}
                                         </h4>
-                                        
-                                        {/* Bottone Rollback (visibile solo se non è la versione iniziale) */}
-                                        {version.versionIndex > 0 && isLatestVersionOfEngine && (
-                                            <button 
-                                                onClick={(e) => {
-                                                    e.stopPropagation(); // Evita di aprire il modale dei dettagli
-                                                    onDeleteVersion(version.engineId, version.engineName);
-                                                }}
-                                                className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-lg text-xs transition-colors shadow-md ml-4"
-                                            >
-                                                Rollback (Elimina Ultima)
-                                            </button>
-                                        )}
+                                        {isLatestVersionOfEngine && <span className="text-xs font-bold text-green-600 dark:text-green-400">(ULTIMA)</span>}
                                     </div>
-
-                                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                        Data Creazione: {new Date(version.timestamp).toLocaleString()}
-                                        {version.validityDate && ` | Valido da: ${version.validityDate}`}
-                                        {isLatestVersionOfEngine && <span className="ml-2 font-bold text-green-600 dark:text-green-400">(ULTIMA DEL MOTORE)</span>}
-                                    </p>
-                                    <ul className="list-disc list-inside text-sm mt-2 text-gray-800 dark:text-gray-200 space-y-1">
-                                        {/* Mostra solo il primo elemento per una sintesi concisa */}
-                                        <li className="font-medium truncate">{changes[0]}</li>
-                                        {changes.length > 1 && <li className="text-gray-500 dark:text-gray-400 text-xs">... (+{changes.length - 1} altre modifiche)</li>}
-                                    </ul>
+                                    
+                                    {/* Bottone Rollback (visibile solo se non è la versione iniziale e se è l'ultima) */}
+                                    {version.versionIndex > 0 && isLatestVersionOfEngine && (
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // Evita di aprire il modale dei dettagli
+                                                onDeleteVersion(version.engineId, version.engineName);
+                                            }}
+                                            className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-lg text-xs transition-colors shadow-md ml-4"
+                                        >
+                                            Rollback (Elimina Ultima)
+                                        </button>
+                                    )}
                                 </div>
+                                
+                                <p className="text-sm text-gray-700 dark:text-gray-300">
+                                    <span className="font-medium">Creazione:</span> {new Date(version.timestamp).toLocaleString()} 
+                                    {version.validityDate && (
+                                        <span className="ml-4 font-bold text-orange-600 dark:text-orange-400">| Valido da: {version.validityDate}</span>
+                                    )}
+                                </p>
+                                
+                                <ul className="list-inside text-sm text-gray-800 dark:text-gray-200">
+                                    {changes.map((change, i) => (
+                                        <li key={i} className="truncate">{change}</li>
+                                    ))}
+                                </ul>
                             </div>
                         );
                     })
@@ -315,10 +337,10 @@ const ChangeDetailsModal = ({ changes, onClose }) => {
                 {change.type === 'modificato' && (
                   <div className="mt-2 space-y-2 text-sm">
                     {Object.entries(change.changes).map(([field, diff]) => (
-                      <div key={field}>
-                        <p className="font-medium">{field}:</p>
-                        <p className="text-red-400 line-through">Prima: {diff.before}</p>
-                        <p className="text-green-400">Dopo: {diff.after}</p>
+                      <div key={field} className="grid grid-cols-1 md:grid-cols-3 gap-2 p-1 border-b border-gray-300 dark:border-gray-600">
+                        <p className="font-medium col-span-1 truncate">{field}:</p>
+                        <p className="text-red-400 line-through col-span-1 truncate">Prima: {diff.before}</p>
+                        <p className="text-green-400 col-span-1 truncate">Dopo: {diff.after}</p>
                       </div>
                     ))}
                   </div>
