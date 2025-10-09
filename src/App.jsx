@@ -192,11 +192,13 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onBackToList })
   const getVersionsByDate = (date) => {
     const versions = [];
     
-    // Logica di filtraggio semplificata e pulita
+    // Logica di filtraggio CORRETTA:
     let targetEngines = [];
     if (filterEngineId === 'all') {
+      // Se è 'all', usa tutti i motori
       targetEngines = engines;
     } else {
+      // Altrimenti, usa solo il motore filtrato
       const filteredEngine = engines.find(e => e.id === filterEngineId);
       if (filteredEngine) {
           targetEngines = [filteredEngine];
