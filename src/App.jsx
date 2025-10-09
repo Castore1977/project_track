@@ -434,8 +434,85 @@ const ChangeDetailsModal = ({ currentVersion, previousVersion, onClose }) => {
   );
 };
 
-const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngines, setExternalEngines, universe, setUniverse, logicDetails, setLogicDetails, kpis, setKpis, documentation, setDocumentation, isEditing, addEntry, updateEntry, deleteEntry }) => {
-  return (
+// Componente helper per la selezione del motore linkato
+const LinkedEngineSelector = ({ allEngines, currentEngineId, engineType, index, entry, updateEntry, isEditing, onEngineJump }) => {
+    // Filtra l'elenco dei motori per escludere il motore corrente per evitare cicli di dipendenza
+    const selectableEngines = allEngines.filter(e => e.id !== currentEngineId);
+    
+    // Funzione per aggiornare l'entry con l'ID selezionato
+    const handleSelectChange = (e) => {
+        const newId = e.target.value === '' ? null : e.target.value;
+        updateEntry(index, 'linkedEngineId', newId);
+        // Se c'è un ID selezionato, disabilita il campo descrizione
+        if (newId) {
+            updateEntry(index, 'description', `Vedi dettagli in: ${allEngines.find(e => e.id === newId)?.name || 'Motore Collegato'}`);
+        } else {
+            // Se si rimuove il collegamento, pulisci la descrizione automatica
+            const currentDesc = entry.description || '';
+            if (currentDesc.startsWith('Vedi dettagli in:')) {
+                updateEntry(index, 'description', '');
+            }
+        }
+    };
+    
+    const linkedEngine = selectableEngines.find(e => e.id === entry.linkedEngineId);
+    const setEngineType = engineType === 'statistical' ? 'setStatisticalEngines' : 'setExternalEngines';
+    const isLinked = !!entry.linkedEngineId;
+
+    return (
+        <div className="flex flex-col space-y-2 mt-2">
+            <div className="flex items-center gap-2">
+                <label className="text-sm font-semibold flex-shrink-0">Collega Motore:</label>
+                <select 
+                    value={entry.linkedEngineId || ''} 
+                    onChange={handleSelectChange} 
+                    disabled={!isEditing}
+                    className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                    <option value="">Nessun Collegamento</option>
+                    {selectableEngines.map(engine => (
+                        <option key={engine.id} value={engine.id}>{engine.name}</option>
+                    ))}
+                </select>
+            </div>
+
+            {isLinked && (
+                <div className="flex justify-between items-center bg-indigo-100 dark:bg-indigo-900/50 p-2 rounded-lg">
+                    <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
+                        Collegato a: {linkedEngine?.name || 'Motore Sconosciuto'}
+                    </p>
+                    {isEditing && (
+                        <button 
+                            onClick={() => onEngineJump(entry.linkedEngineId)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-3 rounded-lg text-xs transition-colors shadow-md"
+                        >
+                            Vai/Modifica
+                        </button>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+
+const EngineDetails = ({ engines, currentEngineId, statisticalEngines, setStatisticalEngines, externalEngines, setExternalEngines, universe, setUniverse, logicDetails, setLogicDetails, kpis, setKpis, documentation, setDocumentation, isEditing, addEntry, updateEntry, deleteEntry, onEngineJump }) => {
+    
+    // Funzione helper per l'aggiornamento dell'array in un EngineDetails
+    const createArrayUpdater = (setter) => (index, key, value) => {
+        setter(prev => {
+            const newArray = [...prev];
+            if(newArray[index]) {
+                newArray[index] = { ...newArray[index], [key]: value };
+            }
+            return newArray;
+        });
+    };
+    
+    const updateStatisticalEngine = createArrayUpdater(setStatisticalEngines);
+    const updateExternalEngine = createArrayUpdater(setExternalEngines);
+
+    return (
     <div className="space-y-8 mt-8">
       {/* Sezione Universo di Applicazione - RESALTATA */}
       <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-blue-500">
@@ -453,18 +530,35 @@ const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngi
       <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-green-500">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-2xl font-bold text-green-500">2. Motore Statistico</h3>
-          {isEditing && <button onClick={() => addEntry(setStatisticalEngines, { name: '', description: '' })} className="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors shadow-md">+</button>}
+          {isEditing && <button onClick={() => addEntry(setStatisticalEngines, { name: '', description: '', linkedEngineId: null })} className="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors shadow-md">+</button>}
         </div>
         <div className="space-y-4">
-          {statisticalEngines.length === 0 && !isEditing ? <p className="text-gray-500 italic">Nessun motore statistico definito.</p> : statisticalEngines.map((engine, index) => (
-            <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
-              <label className="block text-sm font-semibold mb-1">Nome</label>
-              <input type="text" value={engine.name} onChange={(e) => updateEntry(setStatisticalEngines, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-green-500 focus:border-green-500" placeholder="Nome Motore" />
-              <label className="block text-sm font-semibold mt-2 mb-1">Dettagli</label>
-              <textarea value={engine.description} onChange={(e) => updateEntry(setStatisticalEngines, index, 'description', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24 focus:ring-green-500 focus:border-green-500 resize-y" placeholder="Descrizione o specifiche"></textarea>
-              {isEditing && <button onClick={() => deleteEntry(setStatisticalEngines, index)} className="mt-2 text-red-500 text-sm hover:underline">Rimuovi</button>}
-            </div>
-          ))}
+          {statisticalEngines.length === 0 && !isEditing ? <p className="text-gray-500 italic">Nessun motore statistico definito.</p> : statisticalEngines.map((engine, index) => {
+              const isLinked = !!engine.linkedEngineId;
+              return (
+                <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
+                  
+                  <LinkedEngineSelector
+                    allEngines={engines}
+                    currentEngineId={currentEngineId}
+                    engineType="statistical"
+                    index={index}
+                    entry={engine}
+                    updateEntry={updateStatisticalEngine}
+                    isEditing={isEditing}
+                    onEngineJump={onEngineJump}
+                  />
+
+                  <label className="block text-sm font-semibold mb-1 mt-2">Nome</label>
+                  <input type="text" value={engine.name} onChange={(e) => updateEntry(setStatisticalEngines, index, 'name', e.target.value)} disabled={!isEditing || isLinked} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-green-500 focus:border-green-500" placeholder="Nome Motore" />
+                  
+                  <label className="block text-sm font-semibold mt-2 mb-1">Dettagli</label>
+                  <textarea value={engine.description} onChange={(e) => updateEntry(setStatisticalEngines, index, 'description', e.target.value)} disabled={!isEditing || isLinked} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24 focus:ring-green-500 focus:border-green-500 resize-y" placeholder={isLinked ? "Dettagli gestiti dal motore collegato" : "Descrizione o specifiche"}></textarea>
+                  
+                  {isEditing && <button onClick={() => deleteEntry(setStatisticalEngines, index)} className="mt-2 text-red-500 text-sm hover:underline">Rimuovi</button>}
+                </div>
+              );
+          })}
         </div>
       </div>
 
@@ -472,18 +566,35 @@ const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngi
       <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-yellow-500">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-2xl font-bold text-yellow-500">3. Altri Motori Esterni</h3>
-          {isEditing && <button onClick={() => addEntry(setExternalEngines, { name: '', description: '' })} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors shadow-md">+</button>}
+          {isEditing && <button onClick={() => addEntry(setExternalEngines, { name: '', description: '', linkedEngineId: null })} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors shadow-md">+</button>}
         </div>
         <div className="space-y-4">
-          {externalEngines.length === 0 && !isEditing ? <p className="text-gray-500 italic">Nessun motore esterno definito.</p> : externalEngines.map((engine, index) => (
-            <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
-              <label className="block text-sm font-semibold mb-1">Nome</label>
-              <input type="text" value={engine.name} onChange={(e) => updateEntry(setExternalEngines, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-yellow-500 focus:border-yellow-500" placeholder="Nome Motore" />
-              <label className="block text-sm font-semibold mt-2 mb-1">Dettagli</label>
-              <textarea value={engine.description} onChange={(e) => updateEntry(setExternalEngines, index, 'description', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24 focus:ring-yellow-500 focus:border-yellow-500 resize-y" placeholder="Descrizione o specifiche"></textarea>
-              {isEditing && <button onClick={() => deleteEntry(setExternalEngines, index)} className="mt-2 text-red-500 text-sm hover:underline">Rimuovi</button>}
-            </div>
-          ))}
+          {externalEngines.length === 0 && !isEditing ? <p className="text-gray-500 italic">Nessun motore esterno definito.</p> : externalEngines.map((engine, index) => {
+              const isLinked = !!engine.linkedEngineId;
+              return (
+                <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
+                  
+                   <LinkedEngineSelector
+                    allEngines={engines}
+                    currentEngineId={currentEngineId}
+                    engineType="external"
+                    index={index}
+                    entry={engine}
+                    updateEntry={updateExternalEngine}
+                    isEditing={isEditing}
+                    onEngineJump={onEngineJump}
+                  />
+
+                  <label className="block text-sm font-semibold mb-1 mt-2">Nome</label>
+                  <input type="text" value={engine.name} onChange={(e) => updateEntry(setExternalEngines, index, 'name', e.target.value)} disabled={!isEditing || isLinked} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-yellow-500 focus:border-yellow-500" placeholder="Nome Motore" />
+                  
+                  <label className="block text-sm font-semibold mt-2 mb-1">Dettagli</label>
+                  <textarea value={engine.description} onChange={(e) => updateEntry(setExternalEngines, index, 'description', e.target.value)} disabled={!isEditing || isLinked} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24 focus:ring-yellow-500 focus:border-yellow-500 resize-y" placeholder={isLinked ? "Dettagli gestiti dal motore collegato" : "Descrizione o specifiche"}></textarea>
+                  
+                  {isEditing && <button onClick={() => deleteEntry(setExternalEngines, index)} className="mt-2 text-red-500 text-sm hover:underline">Rimuovi</button>}
+                </div>
+              );
+          })}
         </div>
       </div>
 
@@ -640,14 +751,26 @@ const App = () => {
     }
   };
 
-  const handleSelectEngine = (engine) => {
+  const handleSelectEngine = (engine, startEditing = false) => {
     setSelectedEngine(engine);
     if (engine) {
-        setIsEditing(false);
         setIsCreating(false);
         loadEngineData(engine);
+        setIsEditing(startEditing); // Imposta la modalità di modifica se richiesto
     }
   };
+  
+  // Funzione per navigare ad un altro motore e attivare la modifica
+  const handleEngineJump = (engineId) => {
+    const engineToJump = engines.find(e => e.id === engineId);
+    if (engineToJump) {
+        handleSelectEngine(engineToJump, true); // Seleziona e attiva la modifica
+        showTemporaryMessage(`Passato al motore collegato: ${engineToJump.name}`, 'success');
+    } else {
+        showTemporaryMessage("Errore: Motore collegato non trovato.", 'error');
+    }
+  }
+
 
   const handleCreateEngine = () => {
     if (!newEngineName) {
@@ -1025,8 +1148,7 @@ const App = () => {
                     className={`p-3 rounded-lg cursor-pointer transition-colors border-2 ${selectedEngine && selectedEngine.id === engine.id ? 'border-blue-500 bg-blue-100 dark:bg-blue-900 shadow-md' : 'border-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                     onClick={() => handleSelectEngine(engine)}
                     onDoubleClick={() => {
-                        handleSelectEngine(engine);
-                        setIsEditing(true);
+                        handleSelectEngine(engine, true); // Avvia la modifica al doppio click
                     }}
                   >
                     <div className="font-semibold">{engine.name}</div>
@@ -1040,7 +1162,7 @@ const App = () => {
       </div>
 
       <div className="flex-1 p-6 bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
-        {showEngineDetails ? (
+        {selectedEngine || isCreating ? (
           <div>
             <div className="flex flex-wrap justify-between items-center mb-6 border-b pb-4 dark:border-gray-700">
               <h2 className="text-3xl font-extrabold text-gray-800 dark:text-gray-100">{isCreating ? 'Nuovo Motore' : selectedEngine.name}</h2>
@@ -1153,6 +1275,8 @@ const App = () => {
               </div>
             )}
             <EngineDetails
+              engines={engines}
+              currentEngineId={selectedEngine?.id} // Passa l'ID del motore corrente
               statisticalEngines={statisticalEngines}
               setStatisticalEngines={setStatisticalEngines}
               externalEngines={externalEngines}
@@ -1169,6 +1293,7 @@ const App = () => {
               addEntry={addEntry}
               updateEntry={updateEntry}
               deleteEntry={deleteEntry}
+              onEngineJump={handleEngineJump} // Passa la nuova funzione di salto
             />
           </div>
         ) : (
@@ -1176,12 +1301,19 @@ const App = () => {
             <div className="flex justify-between items-center mb-4 border-b pb-4 dark:border-gray-700">
                <h2 className="text-3xl font-extrabold">Visualizzazione Cronologia</h2>
                <div className="space-x-2">
-                    {selectedEngine && (
+                    {engines.length > 0 && (
                         <button
-                            onClick={() => setIsEditing(true)}
+                            onClick={() => {
+                                // Se nessun motore è selezionato, selezioniamo il primo per iniziare la modifica
+                                if (!selectedEngine && engines.length > 0) {
+                                    handleSelectEngine(engines[0], true);
+                                } else if (selectedEngine) {
+                                    setIsEditing(true);
+                                }
+                            }}
                             className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-lg"
                         >
-                            Modifica Engine Corrente
+                            Modifica Engine
                         </button>
                     )}
                </div>
