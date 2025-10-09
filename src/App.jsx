@@ -12,8 +12,9 @@ import React, { useState } from 'react';
  */
 const compareArrayChanges = (currentArray, previousArray, sectionName, uniqueKey = 'name') => {
   const changes = [];
-  const previousMap = new new Map(previousArray.map(item => [item[uniqueKey], item]));
-  const currentMap = new new Map(currentArray.map(item => [item[uniqueKey], item]));
+  // I `new new Map` originali sembrano un errore di battitura, li ho corretti a `new Map`
+  const previousMap = new Map(previousArray.map(item => [item[uniqueKey], item]));
+  const currentMap = new Map(currentArray.map(item => [item[uniqueKey], item]));
 
   // Controlla gli elementi aggiunti o modificati
   for (const currentItem of currentArray) {
@@ -42,7 +43,10 @@ const getChangesSummary = (currentVersion, previousVersion) => {
   const allChanges = [];
 
   const summarizeChanges = (currentArray, previousArray, sectionName) => {
-      const changes = compareArrayChanges(currentArray, previousArray, sectionName);
+      // Garantisce che gli array siano definiti per evitare errori
+      const cArr = currentArray || [];
+      const pArr = previousArray || [];
+      const changes = compareArrayChanges(cArr, pArr, sectionName);
       
       changes.forEach(change => {
           // Ricostruisce la stringa per chiarezza nel riepilogo
@@ -50,8 +54,9 @@ const getChangesSummary = (currentVersion, previousVersion) => {
       });
   };
 
-  const current = currentVersion.data;
-  const previous = previousVersion.data;
+  // Garantisce che i dati siano definiti
+  const current = currentVersion.data || {};
+  const previous = previousVersion.data || {};
 
   // 1. Universo di Applicazione
   if (JSON.stringify(current.universe) !== JSON.stringify(previous.universe)) {
@@ -70,7 +75,7 @@ const getChangesSummary = (currentVersion, previousVersion) => {
   // 5. Impatti (KPI)
   summarizeChanges(current.kpis, previous.kpis, 'KPI');
   
-  // 6. Documentazione
+  // 6. Documentazione (Gestisce anche il caso di versioni vecchie senza documentation)
   summarizeChanges(current.documentation, previous.documentation, 'Documentazione');
 
   // 7. Data di validità (prioritaria)
@@ -116,10 +121,14 @@ const getDetailedChanges = (current, previous) => {
   };
 
   const compareArrays = (currentArr, previousArr, type, uniqueKey) => {
-    const previousMap = new Map(previousArr.map(item => [item[uniqueKey], item]));
-    const currentMap = new Map(currentArr.map(item => [item[uniqueKey], item]));
+    // Aggiunto controllo di fallback ad array vuoto per robustezza
+    const cArr = currentArr || [];
+    const pArr = previousArr || [];
 
-    for (const currentItem of currentArr) {
+    const previousMap = new Map(pArr.map(item => [item[uniqueKey], item]));
+    const currentMap = new Map(cArr.map(item => [item[uniqueKey], item]));
+
+    for (const currentItem of cArr) {
       const previousItem = previousMap.get(currentItem[uniqueKey]);
       if (!previousItem) {
         details.push({ type: 'aggiunto', name: currentItem[uniqueKey], section: type, data: currentItem });
@@ -128,7 +137,7 @@ const getDetailedChanges = (current, previous) => {
       }
     }
 
-    for (const previousItem of previousArr) {
+    for (const previousItem of pArr) {
       if (!currentMap.has(previousItem[uniqueKey])) {
         details.push({ type: 'rimosso', name: previousItem[uniqueKey], section: type, data: previousItem });
       }
@@ -136,10 +145,13 @@ const getDetailedChanges = (current, previous) => {
   };
   
   // Confronto Universo di Applicazione
-  if (JSON.stringify(current.universe) !== JSON.stringify(previous.universe)) {
+  const currentData = current || {};
+  const previousData = previous || {};
+
+  if (JSON.stringify(currentData.universe) !== JSON.stringify(previousData.universe)) {
     const changes = {};
-    const currentUniverse = current.universe || {};
-    const previousUniverse = previous.universe || {};
+    const currentUniverse = currentData.universe || {};
+    const previousUniverse = previousData.universe || {};
     
     if (currentUniverse.description !== previousUniverse.description) {
         changes.description = { 
@@ -152,21 +164,21 @@ const getDetailedChanges = (current, previous) => {
     }
   }
   
-  compareArrays(current.statisticalEngines, previous.statisticalEngines, 'Motore Statistico', 'name');
-  compareArrays(current.externalEngines, previous.externalEngines, 'Motore Esterno', 'name');
-  compareArrays(current.logicDetails, previous.logicDetails, 'Logica del Motore', 'name');
-  compareArrays(current.kpis, previous.kpis, 'Impatto', 'name');
-  compareArrays(current.documentation, previous.documentation, 'Documentazione', 'name');
+  compareArrays(currentData.statisticalEngines, previousData.statisticalEngines, 'Motore Statistico', 'name');
+  compareArrays(currentData.externalEngines, previousData.externalEngines, 'Motore Esterno', 'name');
+  compareArrays(currentData.logicDetails, previousData.logicDetails, 'Logica del Motore', 'name');
+  compareArrays(currentData.kpis, previousData.kpis, 'Impatto', 'name');
+  compareArrays(currentData.documentation, previousData.documentation, 'Documentazione', 'name');
 
   return details;
 };
 
 
-// === VALIDAZIONE STRUTTURALE (NUOVA FUNZIONE) ===
+// === VALIDAZIONE STRUTTURALE (AGGIORNATA PER LA COMPATIBILITÀ) ===
 
 /**
  * Esegue una validazione di base sulla struttura dei motori importati.
- * Questo è FONDAMENTALE per evitare crash dopo un setEngines.
+ * Ora accetta la mancanza dell'array `documentation` per i JSON più vecchi.
  */
 const validateImportedEngines = (engines) => {
     if (!Array.isArray(engines)) return false;
@@ -185,7 +197,7 @@ const validateImportedEngines = (engines) => {
                 return false;
             }
             
-            // Controlla che il blocco dati contenga le strutture chiave previste (anche se vuote)
+            // Controlla che il blocco dati contenga le strutture chiave previste
             const data = version.data;
             if (
                 !data || 
@@ -193,11 +205,18 @@ const validateImportedEngines = (engines) => {
                 !Array.isArray(data.externalEngines) ||
                 !Array.isArray(data.logicDetails) ||
                 !Array.isArray(data.kpis) ||
-                !Array.isArray(data.documentation) ||
                 typeof data.universe !== 'object' || data.universe === null
             ) {
-                 console.error("Validazione fallita: Struttura dati della versione incompleta.", data);
+                 console.error("Validazione fallita: Struttura dati della versione incompleta (mancano array principali o universe).", data);
                  return false;
+            }
+            
+            // *** PUNTO DI COMPATIBILITÀ ***
+            // Se 'documentation' è presente, deve essere un array.
+            // Se è assente, è accettato (vecchio formato JSON).
+            if (data.documentation !== undefined && !Array.isArray(data.documentation)) {
+                console.error("Validazione fallita: documentation è presente ma non è un array.", data);
+                return false;
             }
         }
     }
@@ -603,13 +622,13 @@ const App = () => {
   const loadEngineData = (engine) => {
     const latestVersion = engine.versions[engine.versions.length - 1];
     if (latestVersion && latestVersion.data) {
-      // Inizializza gli stati con fallback ad array vuoti per sicurezza
+      // Inizializza gli stati con fallback ad array vuoti per sicurezza e retrocompatibilità
       setStatisticalEngines(latestVersion.data.statisticalEngines || []);
       setExternalEngines(latestVersion.data.externalEngines || []);
       setUniverse(latestVersion.data.universe || {});
       setLogicDetails(latestVersion.data.logicDetails || []);
       setKpis(latestVersion.data.kpis || []);
-      setDocumentation(latestVersion.data.documentation || []);
+      setDocumentation(latestVersion.data.documentation || []); // <-- Retrocompatibilità: se non esiste, usa []
     } else {
         // Se non ci sono versioni, resetta i dati a vuoto
         setStatisticalEngines([]);
@@ -672,6 +691,12 @@ const App = () => {
     if (!selectedEngine) return;
 
     const currentEngine = engines.find(e => e.id === selectedEngine.id);
+    // Controllo aggiunto per motori con versione vuota, sebbene la validazione dovrebbe prevenirlo
+    if (!currentEngine || currentEngine.versions.length === 0) {
+        showTemporaryMessage("Errore: Impossibile aggiornare un motore senza versioni.", 'error');
+        return;
+    }
+
     const lastVersionTimestamp = currentEngine.versions[currentEngine.versions.length - 1].timestamp;
     const lastVersionDate = new Date(lastVersionTimestamp).toISOString().split('T')[0];
 
@@ -789,10 +814,15 @@ const App = () => {
           loadEngineData(newSelectedEngine);
       } else {
           // Se il motore è stato rimosso (aveva solo 1 versione) o non era selezionato
-          const remainingEngine = engines.find(e => e.id === engineToDeleteId);
-          if (!remainingEngine) {
-              setSelectedEngine(null);
-          }
+          // Dobbiamo re-filtrare engines per trovare la versione aggiornata
+          setEngines(currentEngines => {
+            const updatedEngineList = currentEngines.filter(engine => engine.versions.length > 0);
+            const remainingEngine = updatedEngineList.find(e => e.id === engineToDeleteId);
+            if (!remainingEngine) {
+                setSelectedEngine(null);
+            }
+            return updatedEngineList;
+          });
       }
       
     } else {
@@ -888,6 +918,7 @@ const App = () => {
   };
 
   // Funzioni di supporto per dati basati su array
+  // MODIFICATO: Inserisce il nuovo elemento in testa all'array per coerenza con la UI
   const addEntry = (setter, emptyEntry) => setter(prev => [emptyEntry, ...prev]);
   
   const updateEntry = (setter, index, key, value) => {
