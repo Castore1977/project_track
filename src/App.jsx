@@ -92,7 +92,14 @@ const getDetailedChanges = (current, previous) => {
   };
   
   if (JSON.stringify(current.universe) !== JSON.stringify(previous.universe)) {
-    details.push({ type: 'modificato', name: 'Universo di Applicazione', section: 'Universo', changes: { description: { before: previous.universe.description, after: current.universe.description } } });
+    // Gestione della modifica dell'universo
+    const changes = {};
+    if (current.universe.description !== previous.universe.description) {
+        changes.description = { before: previous.universe.description, after: current.universe.description };
+    }
+    if (Object.keys(changes).length > 0) {
+        details.push({ type: 'modificato', name: 'Universo di Applicazione', section: 'Universo', changes });
+    }
   }
   compareArrays(current.statisticalEngines, previous.statisticalEngines, 'Motore Statistico', 'name');
   compareArrays(current.externalEngines, previous.externalEngines, 'Motore Esterno', 'name');
@@ -170,7 +177,7 @@ const Timeline = ({ versions, onShowDetails, onDeleteVersion }) => {
 };
 
 const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onBackToList }) => {
-  // Stato locale per il filtro, separato da selectedEngine (che serve per la vista principale)
+  // Stato locale per il filtro
   const [filterEngineId, setFilterEngineId] = useState(selectedEngine ? selectedEngine.id : 'all');
 
   const today = new Date();
@@ -209,6 +216,8 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onBackToList })
       engine.versions.forEach((version, index) => {
         // Usa la data di validità se esiste, altrimenti usa la data di creazione
         const timelineDate = version.validityDate ? new Date(version.validityDate) : new Date(version.timestamp);
+        
+        // Confronta solo la data (anno, mese, giorno)
         if (timelineDate.toDateString() === date.toDateString()) {
           const previousVersion = index > 0 ? engine.versions[index - 1] : null;
           versions.push({
@@ -253,8 +262,8 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onBackToList })
       
       {/* Wrapper per lo scorrimento orizzontale */}
       <div className="overflow-x-auto pb-4">
-        {/* Usiamo w-full e min-w-[768px] sui container delle date per forzare la larghezza e abilitare lo scroll orizzontale */}
-        <div className="min-w-[768px]"> 
+        {/* Min-width calcolato per 61 giorni * 32px/giorno = 1952px */}
+        <div className="min-w-[1952px]"> 
             
             {/* Intestazioni Mesi */}
             <div className="flex w-full"> 
@@ -286,7 +295,7 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onBackToList })
                         key={modIndex} 
                         onClick={() => onShowDetails(mod.version.data, mod.previousVersion?.data)} 
                         className={`w-full text-center text-xs mt-1 p-1 rounded-lg text-white cursor-pointer hover:opacity-80 transition-opacity ${getEngineColor(mod.engineName)}`}
-                        title={`${mod.engineName} - Valido da: ${mod.version.validityDate || 'Non specificato'}`}
+                        title={`${mod.engineName} - Valido da: ${mod.version.validityDate || new Date(mod.version.timestamp).toLocaleDateString()}`}
                         >
                         {mod.engineName.substring(0, 3)}
                         </div>
@@ -534,16 +543,17 @@ const App = () => {
   const handleUpdateEngine = (trackChanges) => {
     if (!selectedEngine) return;
     
+    const newEngineData = {
+        statisticalEngines,
+        externalEngines,
+        logicDetails,
+        universe,
+        kpis,
+    };
+
     setEngines(prevEngines => prevEngines.map(engine => {
       if (engine.id === selectedEngine.id) {
         const updatedVersions = [...engine.versions];
-        const newEngineData = {
-          statisticalEngines,
-          externalEngines,
-          logicDetails,
-          universe,
-          kpis,
-        };
         
         if (trackChanges) {
           const newVersion = {
@@ -561,6 +571,7 @@ const App = () => {
             if (changeValidityDate) {
               latestVersion.validityDate = changeValidityDate;
             }
+            latestVersion.timestamp = new Date().toISOString(); // Aggiorna il timestamp dell'ultima versione
           }
         }
         return { ...engine, versions: updatedVersions };
@@ -569,13 +580,9 @@ const App = () => {
     }));
     
     setIsEditing(false);
-    setChangeValidityDate(''); // Reset the date after saving
-    // Aggiorna selectedEngine per riflettere i nuovi dati e versioni
-    const updatedEngine = engines.find(e => e.id === selectedEngine.id);
-    if (updatedEngine) {
-        // Ricarica i dati per l'engine selezionato
-        loadEngineData({ ...updatedEngine, versions: trackChanges ? [...selectedEngine.versions, { data: newEngineData, validityDate: changeValidityDate }] : selectedEngine.versions });
-    }
+    setChangeValidityDate(''); // Reset della data dopo il salvataggio
+    // Aggiorna lo stato dei dati mostrati
+    loadEngineData({ ...selectedEngine, versions: trackChanges ? [...selectedEngine.versions, { data: newEngineData, validityDate: changeValidityDate }] : selectedEngine.versions });
   };
 
   const handleDeleteEngineConfirm = (engineId) => {
@@ -599,13 +606,13 @@ const App = () => {
             loadEngineData({ versions: newVersions });
           } else {
             // Se non rimangono versioni, pulisci i dati
-             resetFormState();
+              resetFormState();
           }
           return { ...engine, versions: newVersions };
         }
         return engine;
       }));
-      // Se l'engine rimane ma senza versioni, deve essere rimosso da selectedEngine (gestito nella funzione chiamante)
+      
       const currentEngine = engines.find(e => e.id === selectedEngine.id);
       if (currentEngine && currentEngine.versions.length <= 1) {
           setSelectedEngine(null);
@@ -626,14 +633,18 @@ const App = () => {
     setIsDeletingVersion(false);
   };
 
-  // Import and Export functions
+  // Funzione di Export aggiornata con data, ora e minuto nel nome del file
   const handleExport = () => {
     const dataStr = JSON.stringify(engines, null, 2);
+    const date = new Date();
+    // Formato: YYYYMMDD_HHmm
+    const filename = `engines_backup_${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}_${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}.json`;
+    
     const blob = new Blob([dataStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'engines.json';
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -706,6 +717,12 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans p-6 flex flex-col lg:flex-row gap-6">
+      <script src="https://cdn.tailwindcss.com"></script>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+      <style>{`
+        body { font-family: 'Inter', sans-serif; }
+      `}</style>
+
       {showDeleteConfirm && (
         <DeleteConfirmModal 
           onConfirm={handleConfirmDelete} 
@@ -810,7 +827,13 @@ const App = () => {
               <h2 className="text-3xl font-bold">{selectedEngine.name}</h2>
               <div className="space-x-2">
                 <button
-                  onClick={() => setIsEditing(prev => !prev)}
+                  onClick={() => {
+                    setIsEditing(prev => !prev);
+                    // Ricarica i dati dell'ultima versione se si esce dalla modalità di modifica
+                    if (isEditing) {
+                        loadEngineData(selectedEngine);
+                    }
+                  }}
                   className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
                 >
                   {isEditing ? 'Visualizza' : 'Modifica'}
@@ -849,7 +872,10 @@ const App = () => {
                 <div className="flex gap-2">
                   <button onClick={() => handleUpdateEngine(true)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Salva con tracciamento</button>
                   <button onClick={() => handleUpdateEngine(false)} className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg">Salva senza tracciamento (Sovrascrive l'ultima versione)</button>
-                  <button onClick={() => setIsEditing(false)} className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Annulla</button>
+                  <button onClick={() => {
+                    setIsEditing(false);
+                    loadEngineData(selectedEngine); // Annulla ripristinando l'ultima versione
+                  }} className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Annulla</button>
                 </div>
               </div>
             )}
