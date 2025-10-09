@@ -680,6 +680,8 @@ const App = () => {
   const [selectedEngine, setSelectedEngine] = useState(null);
   const [loading, setLoading] = useState(false);
   const [fileInput, setFileInput] = useState(null);
+  // Nuovo stato per la gestione del drag and drop
+  const [isDragging, setIsDragging] = useState(false); 
 
   // Stati del form
   const [newEngineName, setNewEngineName] = useState('');
@@ -991,9 +993,8 @@ const App = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Funzione di Import RESILIENTE (FIX)
-  const handleImport = (event) => {
-    const file = event.target.files[0];
+  // Gestisce l'importazione sia da input file che da drag and drop
+  const processImportedFile = (file) => {
     if (!file) return;
 
     const reader = new FileReader();
@@ -1011,13 +1012,19 @@ const App = () => {
         // Deseleziona l'engine corrente dopo l'import
         setSelectedEngine(null); 
         resetFormState();
-        showTemporaryMessage("Importazione JSON completata con successo!");
+        showTemporaryMessage(`Importazione JSON completata con successo da ${file.name}!`);
       } catch (error) {
         showTemporaryMessage("Errore durante la lettura o il parsing del file JSON. Assicurati che sia un JSON valido.", 'error');
         console.error("Error importing file: ", error);
       }
     };
     reader.readAsText(file);
+  }
+  
+  // Funzione di Import RESILIENTE (FIX)
+  const handleImport = (event) => {
+    const file = event.target.files[0];
+    processImportedFile(file);
     // Azzera il valore dell'input file per permettere re-importazioni dello stesso file
     if (fileInput) {
         fileInput.value = '';
@@ -1028,6 +1035,37 @@ const App = () => {
     fileInput.click();
   };
   
+  // LOGICA DRAG AND DROP
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        // Prendiamo solo il primo file
+        const file = e.dataTransfer.files[0];
+        if (file.type === 'application/json' || file.name.endsWith('.json')) {
+            processImportedFile(file);
+        } else {
+            showTemporaryMessage(`Tipo di file non supportato. Trascina solo file .json.`, 'error');
+        }
+        e.dataTransfer.clearData();
+    }
+  };
+
+
   // Passa l'intera versione (currentVersion, previousVersion)
   const handleViewDetails = (currentVersion, previousVersion) => {
     if (!previousVersion) return; 
@@ -1104,7 +1142,18 @@ const App = () => {
       )}
 
 
-      <div className="lg:w-1/4 w-full p-4 bg-white dark:bg-gray-800 rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
+      <div 
+        className={`lg:w-1/4 w-full p-4 bg-white dark:bg-gray-800 rounded-xl shadow-2xl flex flex-col max-h-[90vh] 
+        transition-all duration-300 ${isDragging ? 'ring-4 ring-dashed ring-blue-500 bg-blue-50 dark:bg-blue-900/50' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {isDragging && (
+            <div className="absolute inset-0 flex items-center justify-center bg-blue-500 bg-opacity-10 dark:bg-opacity-30 rounded-xl z-40 pointer-events-none">
+                <p className="text-2xl font-bold text-blue-800 dark:text-blue-200">Rilascia qui il file JSON per l'Importazione</p>
+            </div>
+        )}
         <h2 className="text-2xl font-bold mb-4 border-b pb-2 dark:border-gray-700">Gestione Motori</h2>
         <div className="flex flex-col space-y-2 mb-4">
           <button
@@ -1121,7 +1170,7 @@ const App = () => {
             onClick={handleImportButtonClick}
             className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-lg hover:shadow-xl"
           >
-            Importa da JSON
+            Importa da JSON (o trascina qui)
           </button>
           <input
             type="file"
