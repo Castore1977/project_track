@@ -1216,11 +1216,13 @@ const App = () => {
             <div className="flex flex-wrap justify-between items-center mb-6 border-b pb-4 dark:border-gray-700">
               <h2 className="text-3xl font-extrabold text-gray-800 dark:text-gray-100">{isCreating ? 'Nuovo Motore' : selectedEngine.name}</h2>
               <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
-                  {isEditing && (
+                  {/* PULSANTE AGGIORNATO */}
+                  {(isEditing || isCreating) && (
                       <button
                           onClick={() => {
                               setIsEditing(false);
-                              // Ricarica i dati dell'ultima versione se si esce dalla modalità di modifica
+                              setIsCreating(false);
+                              // Se selezionato, ricarica i dati per garantire coerenza se l'utente annulla
                               if (selectedEngine) {
                                   loadEngineData(selectedEngine);
                               } else {
@@ -1232,17 +1234,7 @@ const App = () => {
                           Visualizza Cronologia
                       </button>
                   )}
-                  {isCreating && (
-                      <button
-                          onClick={() => {
-                              setIsCreating(false);
-                              resetFormState();
-                          }}
-                          className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm shadow-md"
-                      >
-                          Annulla Creazione
-                      </button>
-                  )}
+                  {/* PULSANTI DI GESTIONE MOTORE */}
                   {selectedEngine && !isCreating && (
                       <button
                           onClick={() => handleDeleteEngineConfirm(selectedEngine.id)}
