@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
 
-// Funzioni di supporto per confrontare i dati e generare riepiloghi
+// === FUNZIONI DI SUPPORTO PER IL CONFRONTO E IL RIEPILOGO ===
+
+/**
+ * Confronta due array di oggetti per rilevare aggiunte, rimozioni e modifiche.
+ * @param {Array} currentArray - Array della versione corrente.
+ * @param {Array} previousArray - Array della versione precedente.
+ * @param {string} sectionName - Nome della sezione per la messaggistica.
+ * @param {string} uniqueKey - Chiave unica per identificare gli elementi (es. 'name').
+ * @returns {Array} Lista di stringhe che descrivono le modifiche.
+ */
 const compareArrayChanges = (currentArray, previousArray, sectionName, uniqueKey = 'name') => {
   const changes = [];
-  const previousMap = new Map(previousArray.map(item => [item[uniqueKey], item]));
-  const currentMap = new Map(currentArray.map(item => [item[uniqueKey], item]));
+  const previousMap = new new Map(previousArray.map(item => [item[uniqueKey], item]));
+  const currentMap = new new Map(currentArray.map(item => [item[uniqueKey], item]));
 
   // Controlla gli elementi aggiunti o modificati
   for (const currentItem of currentArray) {
@@ -26,7 +35,9 @@ const compareArrayChanges = (currentArray, previousArray, sectionName, uniqueKey
   return changes;
 };
 
-// Funzione di riepilogo aggiornata per essere più dettagliata per elemento
+/**
+ * Genera un riepilogo conciso delle modifiche tra due versioni.
+ */
 const getChangesSummary = (currentVersion, previousVersion) => {
   const allChanges = [];
 
@@ -34,7 +45,7 @@ const getChangesSummary = (currentVersion, previousVersion) => {
       const changes = compareArrayChanges(currentArray, previousArray, sectionName);
       
       changes.forEach(change => {
-          // La funzione compareArrayChanges restituisce già stringhe nel formato "Aggiunto [Sezione]: [Nome Elemento]"
+          // Ricostruisce la stringa per chiarezza nel riepilogo
           allChanges.push(`[${sectionName}] ${change.split(': ').slice(0, 1).join(': ')}: ${change.split(': ').slice(1).join(': ')}`);
       });
   };
@@ -71,16 +82,34 @@ const getChangesSummary = (currentVersion, previousVersion) => {
   return allChanges.length > 0 ? allChanges : ['Nessuna modifica tracciata.'];
 };
 
+/**
+ * Genera il dettaglio completo delle modifiche campo per campo.
+ */
 const getDetailedChanges = (current, previous) => {
   const details = [];
 
   const compareObjects = (currentObj, previousObj, type, key) => {
     const changes = {};
     for (const field in currentObj) {
+      // Ignora la comparazione se la chiave non esiste nel precedente (dovrebbe essere gestita da compareArrays)
+      if (!previousObj.hasOwnProperty(field)) continue; 
+      
+      // Controllo di uguaglianza semplice, funziona per stringhe e numeri
       if (currentObj[field] !== previousObj[field]) {
-        changes[field] = { before: previousObj[field], after: currentObj[field] };
+        changes[field] = { 
+          before: previousObj[field] || '[Vuoto]', 
+          after: currentObj[field] || '[Vuoto]' 
+        };
       }
     }
+    
+    // Controlla campi rimossi se erano presenti in precedente ma non in corrente
+     for (const field in previousObj) {
+        if (!currentObj.hasOwnProperty(field)) {
+            changes[field] = { before: previousObj[field] || '[Vuoto]', after: '[Rimosso]' };
+        }
+    }
+
     if (Object.keys(changes).length > 0) {
       details.push({ type: 'modificato', name: key, section: type, changes: changes });
     }
@@ -106,16 +135,23 @@ const getDetailedChanges = (current, previous) => {
     }
   };
   
+  // Confronto Universo di Applicazione
   if (JSON.stringify(current.universe) !== JSON.stringify(previous.universe)) {
-    // Gestione della modifica dell'universo
     const changes = {};
-    if (current.universe.description !== previous.universe.description) {
-        changes.description = { before: previous.universe.description, after: current.universe.description };
+    const currentUniverse = current.universe || {};
+    const previousUniverse = previous.universe || {};
+    
+    if (currentUniverse.description !== previousUniverse.description) {
+        changes.description = { 
+            before: previousUniverse.description || '[Vuoto]', 
+            after: currentUniverse.description || '[Vuoto]' 
+        };
     }
     if (Object.keys(changes).length > 0) {
-        details.push({ type: 'modificato', name: 'Universo di Applicazione', section: 'Universo', changes });
+      details.push({ type: 'modificato', name: 'Universo di Applicazione', section: 'Universo', changes });
     }
   }
+  
   compareArrays(current.statisticalEngines, previous.statisticalEngines, 'Motore Statistico', 'name');
   compareArrays(current.externalEngines, previous.externalEngines, 'Motore Esterno', 'name');
   compareArrays(current.logicDetails, previous.logicDetails, 'Logica del Motore', 'name');
@@ -125,37 +161,85 @@ const getDetailedChanges = (current, previous) => {
   return details;
 };
 
-// Componenti React
+
+// === VALIDAZIONE STRUTTURALE (NUOVA FUNZIONE) ===
+
+/**
+ * Esegue una validazione di base sulla struttura dei motori importati.
+ * Questo è FONDAMENTALE per evitare crash dopo un setEngines.
+ */
+const validateImportedEngines = (engines) => {
+    if (!Array.isArray(engines)) return false;
+    
+    for (const engine of engines) {
+        // Controlla le proprietà di base dell'Engine
+        if (!engine || typeof engine.id !== 'string' || typeof engine.name !== 'string' || !Array.isArray(engine.versions)) {
+            console.error("Validazione fallita: Motore o Versions non validi.", engine);
+            return false;
+        }
+        
+        for (const version of engine.versions) {
+            // Controlla le proprietà di base della Versione
+            if (!version || typeof version.versionId !== 'string' || !version.data || typeof version.timestamp !== 'string') {
+                console.error("Validazione fallita: Versione non valida.", version);
+                return false;
+            }
+            
+            // Controlla che il blocco dati contenga le strutture chiave previste (anche se vuote)
+            const data = version.data;
+            if (
+                !data || 
+                !Array.isArray(data.statisticalEngines) || 
+                !Array.isArray(data.externalEngines) ||
+                !Array.isArray(data.logicDetails) ||
+                !Array.isArray(data.kpis) ||
+                !Array.isArray(data.documentation) ||
+                typeof data.universe !== 'object' || data.universe === null
+            ) {
+                 console.error("Validazione fallita: Struttura dati della versione incompleta.", data);
+                 return false;
+            }
+        }
+    }
+    return true;
+};
+
+
+// === COMPONENTI REACT ===
+
 const DeleteConfirmModal = ({ onConfirm, onCancel, message }) => {
   return (
     <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm w-full text-center">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm w-full text-center text-gray-900 dark:text-gray-100">
         <h3 className="text-xl font-bold mb-4">Conferma Eliminazione</h3>
         <p className="mb-6">{message}</p>
         <div className="flex justify-center gap-4">
-          <button onClick={onCancel} className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Annulla</button>
-          <button onClick={onConfirm} className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Conferma</button>
+          <button onClick={onCancel} className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition-colors">Annulla</button>
+          <button onClick={onConfirm} className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Conferma</button>
         </div>
       </div>
     </div>
   );
 };
 
-// Nuovo componente per la timeline combinata
 const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
     const [filterEngineId, setFilterEngineId] = useState('all');
 
     // 1. Raccogli tutte le versioni con i dati del motore
-    const allVersions = engines.flatMap(engine => 
-        engine.versions.map((version, index) => ({
+    const allVersions = engines.flatMap(engine => {
+        // Filtra motori senza versioni (dovrebbero essere già filtrati, ma per sicurezza)
+        if (!engine.versions || engine.versions.length === 0) return [];
+        
+        return engine.versions.map((version, index) => ({
             ...version,
             engineId: engine.id,
             engineName: engine.name,
             engineVersions: engine.versions, // Passa tutte le versioni del motore per calcolare la versione precedente
             versionIndex: index,
-        }))
-    ).filter(v => filterEngineId === 'all' || v.engineId === filterEngineId)
-     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Ordina dalla più recente
+        }));
+    })
+    .filter(v => filterEngineId === 'all' || v.engineId === filterEngineId)
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Ordina dalla più recente
 
     const engineColors = ['bg-blue-500', 'bg-green-500', 'bg-red-500', 'bg-yellow-500', 'bg-purple-500', 'bg-indigo-500', 'bg-pink-500', 'bg-teal-500'];
     const getEngineColor = (engineId) => {
@@ -169,11 +253,11 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
                 <h3 className="text-2xl font-bold">Cronologia delle Versioni Combinata</h3>
             </div>
             
-            <div className="flex gap-4 items-center mb-4">
-                <label className="text-sm font-semibold">Filtra per motore:</label>
+            <div className="flex flex-wrap gap-4 items-center mb-4 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg shadow-inner">
+                <label className="text-sm font-semibold flex-shrink-0">Filtra per motore:</label>
                 <select onChange={(e) => setFilterEngineId(e.target.value)} 
                         value={filterEngineId} 
-                        className="p-2 rounded-lg bg-gray-50 dark:bg-gray-700">
+                        className="p-2 rounded-lg bg-white dark:bg-gray-900 border dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500">
                     <option value="all">Tutti i motori</option>
                     {engines.map(engine => <option key={engine.id} value={engine.id}>{engine.name}</option>)}
                 </select>
@@ -181,12 +265,11 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
             
             <div className="space-y-4">
                 {allVersions.length === 0 ? (
-                    <p className="text-center text-gray-500 dark:text-gray-400">Nessuna versione da visualizzare.</p>
+                    <p className="text-center text-gray-500 dark:text-gray-400 p-8 border-2 border-dashed rounded-lg">Nessuna versione da visualizzare. Crea un motore per iniziare.</p>
                 ) : (
                     allVersions.map((version, index) => {
                         const previousVersion = version.versionIndex > 0 ? version.engineVersions[version.versionIndex - 1] : null;
                         
-                        // Per il riepilogo, usiamo la versione corrente e la precedente (se esiste)
                         const changes = previousVersion 
                             ? getChangesSummary(version, previousVersion) 
                             : ['Versione iniziale del motore.'];
@@ -194,40 +277,50 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
                         const engineColorClass = getEngineColor(version.engineId);
                         const isLatestVersionOfEngine = version.versionIndex === version.engineVersions.length - 1; // Verifica se è l'ultima versione di quel motore
 
+                        // Classe per lo sfondo della card
+                        const cardBgClass = engineColorClass.replace('bg-', 'bg-') + ' bg-opacity-10 dark:bg-opacity-20';
+                        // Classe per il testo dell'intestazione
+                        const textHeaderClass = engineColorClass.replace('bg-', 'text-');
+                        
                         return (
                             <div 
                                 key={version.versionId} 
-                                className={`p-4 rounded-lg shadow-md cursor-pointer transition-transform flex flex-col space-y-2 
-                                            ${isLatestVersionOfEngine && filterEngineId !== version.engineId ? 'ring-2 ring-purple-400' : ''}
-                                            ${engineColorClass} bg-opacity-10 dark:bg-opacity-20`}
-                                // Gestione del click per i dettagli
-                                onClick={() => {
-                                    if(previousVersion) {
-                                        onShowDetails(version.data, previousVersion.data);
-                                    }
-                                }}
+                                className={`p-4 rounded-xl shadow-md transition-all flex flex-col space-y-2 border-l-4 ${engineColorClass.replace('bg-', 'border-')} ${cardBgClass}`}
                             >
                                 <div className="flex justify-between items-center w-full">
                                     <div className="flex items-center space-x-3">
-                                        <div className={`w-3 h-3 rounded-full ${engineColorClass} flex-shrink-0`}></div>
-                                        <h4 className={`font-semibold text-lg ${engineColorClass.replace('bg-', 'text-')}`}>
+                                        <div className={`w-3 h-3 rounded-full ${engineColorClass} flex-shrink-0 ring-2 ring-white dark:ring-gray-800`}></div>
+                                        <h4 className={`font-semibold text-lg ${textHeaderClass}`}>
                                             {version.engineName} - Versione {version.versionIndex + 1}
                                         </h4>
-                                        {isLatestVersionOfEngine && <span className="text-xs font-bold text-green-600 dark:text-green-400">(ULTIMA)</span>}
+                                        {isLatestVersionOfEngine && <span className="text-xs font-bold text-green-600 dark:text-green-400 p-1 bg-green-100 dark:bg-green-900 rounded-full px-2">ULTIMA</span>}
                                     </div>
                                     
-                                    {/* Bottone Rollback (visibile solo se non è la versione iniziale e se è l'ultima) */}
-                                    {version.versionIndex > 0 && isLatestVersionOfEngine && (
-                                        <button 
-                                            onClick={(e) => {
-                                                e.stopPropagation(); // Evita di aprire il modale dei dettagli
-                                                onDeleteVersion(version.engineId, version.engineName);
-                                            }}
-                                            className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-lg text-xs transition-colors shadow-md ml-4"
-                                        >
-                                            Rollback (Elimina Ultima)
-                                        </button>
-                                    )}
+                                    <div className="flex items-center space-x-2">
+                                        {/* Bottone Dettaglio (visibile solo se esiste una versione precedente per confrontare) */}
+                                        {previousVersion && (
+                                            <button
+                                                onClick={() => onShowDetails(version, previousVersion)} // Passa l'intera versione per consistenza
+                                                className="bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 font-bold py-1 px-3 rounded-lg text-xs transition-colors shadow-md"
+                                                title="Visualizza le modifiche dettagliate rispetto alla versione precedente"
+                                            >
+                                                Dettaglio
+                                            </button>
+                                        )}
+                                        {/* Bottone Rollback (visibile solo se non è la versione iniziale e se è l'ultima) */}
+                                        {version.versionIndex > 0 && isLatestVersionOfEngine && (
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // Evita interazione involontaria
+                                                    onDeleteVersion(version.engineId, version.engineName);
+                                                }}
+                                                className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-lg text-xs transition-colors shadow-md"
+                                                title="Elimina questa versione e ripristina lo stato precedente (Rollback)"
+                                            >
+                                                Rollback
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                                 
                                 <p className="text-sm text-gray-700 dark:text-gray-300 flex flex-wrap gap-x-4">
@@ -237,10 +330,11 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
                                     )}
                                 </p>
                                 
-                                <ul className="list-inside text-sm text-gray-800 dark:text-gray-200 space-y-0.5">
-                                    {changes.map((change, i) => (
+                                <ul className="list-disc list-inside text-sm text-gray-800 dark:text-gray-200 space-y-0.5 mt-2">
+                                    {changes.slice(0, 5).map((change, i) => (
                                         <li key={i} className="truncate">{change}</li>
                                     ))}
+                                    {changes.length > 5 && <li className="text-xs text-gray-500">...altre {changes.length - 5} modifiche. Apri il Dettaglio.</li>}
                                 </ul>
                             </div>
                         );
@@ -251,100 +345,66 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
     );
 };
 
-
-// Componente eliminato: GanttTimeline
-
-// Componente mantenuto per consistenza, ma non più utilizzato nel flusso principale.
 const Timeline = ({ versions, onShowDetails, onDeleteVersion }) => {
-  return (
-    <div className="space-y-8 mt-8">
-      <div className="flex justify-between items-center">
-        <h3 className="text-2xl font-bold">Cronologia del Motore Corrente (Vista Deprecata)</h3>
-        {versions.length > 1 && (
-          <button 
-            onClick={() => onDeleteVersion(versions[0].engineId, versions[0].engineName)} 
-            className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm"
-          >
-            Elimina Ultima Versione
-          </button>
-        )}
-      </div>
-      {versions.slice().reverse().map((version, index) => {
-        const originalIndex = versions.length - 1 - index;
-        const previousVersion = originalIndex > 0 ? versions[originalIndex - 1] : null;
-        const changes = previousVersion ? getChangesSummary(version, previousVersion) : ['Versione iniziale del motore.'];
-
-        return (
-          <div key={version.versionId} className="relative pl-6">
-            <div className="absolute left-0 top-1 w-2 h-2 bg-blue-500 rounded-full"></div>
-            <div className="absolute left-1.5 top-2 h-full w-0.5 bg-blue-200 dark:bg-blue-800 -z-10"></div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{new Date(version.timestamp).toLocaleString()}</p>
-            {version.validityDate && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-bold mt-1">Valido da: {version.validityDate}</p>
-            )}
-            <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg mt-2">
-              <h4 className="font-semibold text-lg">Versione {versions.length - index}</h4>
-              <ul className="list-disc list-inside text-sm mt-2 space-y-1">
-                {changes.map((change, i) => (
-                  <li key={i}>{change}</li>
-                ))}
-              </ul>
-              {previousVersion && (
-                <button
-                  onClick={() => onShowDetails(version.data, previousVersion.data)}
-                  className="mt-4 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 py-1 px-3 rounded-lg text-sm"
-                >
-                  Visualizza Dettaglio
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+    // Componente di cronologia deprecato, mantenuto solo per completezza ma non usato nel flusso principale
+    return null;
 };
 
 
-const ChangeDetailsModal = ({ changes, onClose }) => {
-  if (!changes) return null;
+const ChangeDetailsModal = ({ currentVersion, previousVersion, onClose }) => {
+  if (!currentVersion || !previousVersion) return null;
+
+  // Usa l'API completa per il dettaglio
+  const changes = getDetailedChanges(currentVersion.data, previousVersion.data);
 
   return (
     <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-3xl max-h-[95vh] overflow-y-auto shadow-2xl text-gray-900 dark:text-gray-100">
+        <div className="flex justify-between items-center mb-4 border-b pb-2 dark:border-gray-700">
           <h3 className="text-2xl font-bold">Dettaglio Modifiche</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Confronto tra Versione {previousVersion.versionIndex + 1} ({previousVersion.validityDate || new Date(previousVersion.timestamp).toLocaleDateString()}) e Versione {currentVersion.versionIndex + 1} ({currentVersion.validityDate || new Date(currentVersion.timestamp).toLocaleDateString()}).
+        </p>
         <div className="space-y-6">
           {changes.length === 0 ? (
-            <p>Nessuna modifica tracciata per questa versione.</p>
+            <p className="text-center text-gray-500 p-8 border-2 border-dashed rounded-lg">Nessuna modifica strutturale o di contenuto rilevata.</p>
           ) : (
             changes.map((change, index) => (
-              <div key={index} className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                <h4 className="font-semibold text-lg">
+              <div key={index} className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-inner">
+                <h4 className="font-bold text-xl mb-3">
                   <span className={`capitalize ${change.type === 'aggiunto' ? 'text-green-500' : change.type === 'rimosso' ? 'text-red-500' : 'text-orange-500'}`}>
                     {change.type}:
-                  </span> {change.section} - {change.name}
+                  </span> {change.section} - <span className="text-gray-900 dark:text-gray-100">{change.name}</span>
                 </h4>
+                
                 {change.type === 'modificato' && (
-                  <div className="mt-2 space-y-2 text-sm">
+                  <div className="mt-2 space-y-2 text-sm border-t pt-2 dark:border-gray-600">
                     {Object.entries(change.changes).map(([field, diff]) => (
-                      // Rimosso 'truncate' e aumentato lo spazio per la lettura completa
                       <div key={field} className="grid grid-cols-1 md:grid-cols-3 gap-2 p-1 border-b border-gray-300 dark:border-gray-600 break-words">
-                        <p className="font-medium col-span-1">{field}:</p>
-                        <p className="text-red-400 line-through col-span-1">Prima: {diff.before}</p>
-                        <p className="text-green-400 col-span-1">Dopo: {diff.after}</p>
+                        <p className="font-medium col-span-1 text-blue-400">{field}:</p>
+                        <div className="col-span-1">
+                            <p className="text-red-400 text-xs">Prima:</p>
+                            <p className="line-through">{diff.before}</p>
+                        </div>
+                        <div className="col-span-1">
+                            <p className="text-green-400 text-xs">Dopo:</p>
+                            <p>{diff.after}</p>
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
                 {(change.type === 'aggiunto' || change.type === 'rimosso') && (
-                  <pre className="mt-2 p-2 bg-gray-200 dark:bg-gray-900 rounded text-sm overflow-x-auto">{JSON.stringify(change.data, null, 2)}</pre>
+                  <>
+                    <p className="text-xs font-semibold mt-2">Dettagli Completi dell'Oggetto:</p>
+                    <pre className="mt-2 p-2 bg-gray-200 dark:bg-gray-900 rounded text-xs overflow-x-auto max-h-48 whitespace-pre-wrap">{JSON.stringify(change.data, null, 2)}</pre>
+                  </>
                 )}
               </div>
             ))
@@ -365,7 +425,8 @@ const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngi
           value={universe.description || ''} 
           onChange={(e) => setUniverse({ description: e.target.value })} 
           disabled={!isEditing} 
-          className="w-full p-2 border rounded-lg bg-gray-50 dark:bg-gray-900 dark:border-gray-600 h-24 text-gray-900 dark:text-gray-100"
+          className="w-full p-2 border rounded-lg bg-gray-50 dark:bg-gray-900 dark:border-gray-600 h-24 text-gray-900 dark:text-gray-100 focus:ring-blue-500 focus:border-blue-500 resize-y"
+          placeholder="Descrivi qui l'ambito di applicazione del motore..."
         ></textarea>
       </div>
 
@@ -373,16 +434,16 @@ const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngi
       <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-green-500">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-2xl font-bold text-green-500">2. Motore Statistico</h3>
-          {isEditing && <button onClick={() => addEntry(setStatisticalEngines, { name: '', description: '' })} className="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors">+</button>}
+          {isEditing && <button onClick={() => addEntry(setStatisticalEngines, { name: '', description: '' })} className="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors shadow-md">+</button>}
         </div>
         <div className="space-y-4">
-          {statisticalEngines.map((engine, index) => (
+          {statisticalEngines.length === 0 && !isEditing ? <p className="text-gray-500 italic">Nessun motore statistico definito.</p> : statisticalEngines.map((engine, index) => (
             <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
               <label className="block text-sm font-semibold mb-1">Nome</label>
-              <input type="text" value={engine.name} onChange={(e) => updateEntry(setStatisticalEngines, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600" />
+              <input type="text" value={engine.name} onChange={(e) => updateEntry(setStatisticalEngines, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-green-500 focus:border-green-500" placeholder="Nome Motore" />
               <label className="block text-sm font-semibold mt-2 mb-1">Dettagli</label>
-              <textarea value={engine.description} onChange={(e) => updateEntry(setStatisticalEngines, index, 'description', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24"></textarea>
-              {isEditing && <button onClick={() => deleteEntry(setStatisticalEngines, index)} className="mt-2 text-red-500 text-sm">Rimuovi</button>}
+              <textarea value={engine.description} onChange={(e) => updateEntry(setStatisticalEngines, index, 'description', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24 focus:ring-green-500 focus:border-green-500 resize-y" placeholder="Descrizione o specifiche"></textarea>
+              {isEditing && <button onClick={() => deleteEntry(setStatisticalEngines, index)} className="mt-2 text-red-500 text-sm hover:underline">Rimuovi</button>}
             </div>
           ))}
         </div>
@@ -392,16 +453,16 @@ const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngi
       <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-yellow-500">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-2xl font-bold text-yellow-500">3. Altri Motori Esterni</h3>
-          {isEditing && <button onClick={() => addEntry(setExternalEngines, { name: '', description: '' })} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors">+</button>}
+          {isEditing && <button onClick={() => addEntry(setExternalEngines, { name: '', description: '' })} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors shadow-md">+</button>}
         </div>
         <div className="space-y-4">
-          {externalEngines.map((engine, index) => (
+          {externalEngines.length === 0 && !isEditing ? <p className="text-gray-500 italic">Nessun motore esterno definito.</p> : externalEngines.map((engine, index) => (
             <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
               <label className="block text-sm font-semibold mb-1">Nome</label>
-              <input type="text" value={engine.name} onChange={(e) => updateEntry(setExternalEngines, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600" />
+              <input type="text" value={engine.name} onChange={(e) => updateEntry(setExternalEngines, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-yellow-500 focus:border-yellow-500" placeholder="Nome Motore" />
               <label className="block text-sm font-semibold mt-2 mb-1">Dettagli</label>
-              <textarea value={engine.description} onChange={(e) => updateEntry(setExternalEngines, index, 'description', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24"></textarea>
-              {isEditing && <button onClick={() => deleteEntry(setExternalEngines, index)} className="mt-2 text-red-500 text-sm">Rimuovi</button>}
+              <textarea value={engine.description} onChange={(e) => updateEntry(setExternalEngines, index, 'description', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24 focus:ring-yellow-500 focus:border-yellow-500 resize-y" placeholder="Descrizione o specifiche"></textarea>
+              {isEditing && <button onClick={() => deleteEntry(setExternalEngines, index)} className="mt-2 text-red-500 text-sm hover:underline">Rimuovi</button>}
             </div>
           ))}
         </div>
@@ -411,16 +472,16 @@ const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngi
       <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-red-500">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-2xl font-bold text-red-500">4. Logiche del Motore</h3>
-          {isEditing && <button onClick={() => addEntry(setLogicDetails, { name: '', description: '' })} className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors">+</button>}
+          {isEditing && <button onClick={() => addEntry(setLogicDetails, { name: '', description: '' })} className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors shadow-md">+</button>}
         </div>
         <div className="space-y-4">
-          {logicDetails.map((logic, index) => (
+          {logicDetails.length === 0 && !isEditing ? <p className="text-gray-500 italic">Nessuna logica definita.</p> : logicDetails.map((logic, index) => (
             <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
               <label className="block text-sm font-semibold mb-1">Nome Logica</label>
-              <input type="text" value={logic.name} onChange={(e) => updateEntry(setLogicDetails, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600" />
+              <input type="text" value={logic.name} onChange={(e) => updateEntry(setLogicDetails, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-red-500 focus:border-red-500" placeholder="Nome Logica" />
               <label className="block text-sm font-semibold mt-2 mb-1">Dettaglio</label>
-              <textarea value={logic.description} onChange={(e) => updateEntry(setLogicDetails, index, 'description', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24"></textarea>
-              {isEditing && <button onClick={() => deleteEntry(setLogicDetails, index)} className="mt-2 text-red-500 text-sm">Rimuovi</button>}
+              <textarea value={logic.description} onChange={(e) => updateEntry(setLogicDetails, index, 'description', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24 focus:ring-red-500 focus:border-red-500 resize-y" placeholder="Descrizione del funzionamento"></textarea>
+              {isEditing && <button onClick={() => deleteEntry(setLogicDetails, index)} className="mt-2 text-red-500 text-sm hover:underline">Rimuovi</button>}
             </div>
           ))}
         </div>
@@ -430,18 +491,18 @@ const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngi
       <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-purple-500">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-2xl font-bold text-purple-500">5. Impatto (KPI)</h3>
-          {isEditing && <button onClick={() => addEntry(setKpis, { name: '', calculation: '', impact: '' })} className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors">+</button>}
+          {isEditing && <button onClick={() => addEntry(setKpis, { name: '', calculation: '', impact: '' })} className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors shadow-md">+</button>}
         </div>
         <div className="space-y-4">
-          {kpis.map((kpi, index) => (
+          {kpis.length === 0 && !isEditing ? <p className="text-gray-500 italic">Nessun KPI definito.</p> : kpis.map((kpi, index) => (
             <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
               <label className="block text-sm font-semibold mb-1">Nome KPI</label>
-              <input type="text" value={kpi.name} onChange={(e) => updateEntry(setKpis, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600" />
+              <input type="text" value={kpi.name} onChange={(e) => updateEntry(setKpis, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-purple-500 focus:border-purple-500" placeholder="Nome KPI" />
               <label className="block text-sm font-semibold mt-2 mb-1">Dettaglio Calcolo</label>
-              <textarea value={kpi.calculation} onChange={(e) => updateEntry(setKpis, index, 'calculation', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-16"></textarea>
+              <textarea value={kpi.calculation} onChange={(e) => updateEntry(setKpis, index, 'calculation', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-16 focus:ring-purple-500 focus:border-purple-500 resize-y" placeholder="Formula o Metodologia"></textarea>
               <label className="block text-sm font-semibold mt-2 mb-1">Impatto</label>
-              <textarea value={kpi.impact} onChange={(e) => updateEntry(setKpis, index, 'impact', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-16"></textarea>
-              {isEditing && <button onClick={() => deleteEntry(setKpis, index)} className="mt-2 text-red-500 text-sm">Rimuovi</button>}
+              <textarea value={kpi.impact} onChange={(e) => updateEntry(setKpis, index, 'impact', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-16 focus:ring-purple-500 focus:border-purple-500 resize-y" placeholder="Impatto sul business"></textarea>
+              {isEditing && <button onClick={() => deleteEntry(setKpis, index)} className="mt-2 text-red-500 text-sm hover:underline">Rimuovi</button>}
             </div>
           ))}
         </div>
@@ -451,20 +512,30 @@ const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngi
       <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-indigo-500">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-2xl font-bold text-indigo-500">6. Documentazione</h3>
-          {isEditing && <button onClick={() => addEntry(setDocumentation, { name: '', url: '' })} className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors">+</button>}
+          {isEditing && <button onClick={() => addEntry(setDocumentation, { name: '', url: '' })} className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors shadow-md">+</button>}
         </div>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Aggiungi link a documenti, report o specifiche (anche a file locali usando il percorso completo, sebbene l'accesso diretto sia bloccato dai browser).</p>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Aggiungi link a documenti o specifiche. Nota: l'accesso ai file locali è bloccato dai browser.</p>
         <div className="space-y-4">
-          {documentation.map((doc, index) => (
+          {documentation.length === 0 && !isEditing ? <p className="text-gray-500 italic">Nessun documento collegato.</p> : documentation.map((doc, index) => (
             <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
               <label className="block text-sm font-semibold mb-1">Nome Documento</label>
-              <input type="text" value={doc.name} onChange={(e) => updateEntry(setDocumentation, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600" />
-              <label className="block text-sm font-semibold mt-2 mb-1">Link / Percorso Locale</label>
+              <input type="text" value={doc.name} onChange={(e) => updateEntry(setDocumentation, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Nome del documento" />
+              <label className="block text-sm font-semibold mt-2 mb-1">Link / URL</label>
               <div className="flex items-center gap-2">
-                  <input type="text" value={doc.url} onChange={(e) => updateEntry(setDocumentation, index, 'url', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600" />
-                  <a href={doc.url} target="_blank" rel="noopener noreferrer" className="bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-gray-100 py-1 px-3 rounded-lg text-sm flex-shrink-0" title="Apri Link">Apri</a>
+                  {/* Usa un placeholder per URL vuoti per evitare avvisi nel campo di input */}
+                  <input 
+                      type="text" 
+                      value={doc.url} 
+                      onChange={(e) => updateEntry(setDocumentation, index, 'url', e.target.value)} 
+                      disabled={!isEditing} 
+                      className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500" 
+                      placeholder="https://esempio.com/documento.pdf"
+                  />
+                  {doc.url && (
+                    <a href={doc.url.startsWith('http') ? doc.url : `http://${doc.url}`} target="_blank" rel="noopener noreferrer" className="bg-indigo-500 hover:bg-indigo-600 text-white py-1 px-3 rounded-lg text-sm flex-shrink-0 transition-colors shadow-sm" title="Apri Link">Apri</a>
+                  )}
               </div>
-              {isEditing && <button onClick={() => deleteEntry(setDocumentation, index)} className="mt-2 text-red-500 text-sm">Rimuovi</button>}
+              {isEditing && <button onClick={() => deleteEntry(setDocumentation, index)} className="mt-2 text-red-500 text-sm hover:underline">Rimuovi</button>}
             </div>
           ))}
         </div>
@@ -488,13 +559,12 @@ const App = () => {
   const [universe, setUniverse] = useState({});
   const [logicDetails, setLogicDetails] = useState([]);
   const [kpis, setKpis] = useState([]);
-  const [documentation, setDocumentation] = useState([]); // NUOVO STATO
+  const [documentation, setDocumentation] = useState([]);
   const [changeValidityDate, setChangeValidityDate] = useState('');
 
   // Stati del modale e della vista
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [timelineView, setTimelineView] = useState('combined'); 
   const [changeDetails, setChangeDetails] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -502,7 +572,7 @@ const App = () => {
   const [engineToDeleteId, setEngineToDeleteId] = useState(null);
   const [engineToDeleteName, setEngineToDeleteName] = useState(null); 
   const [showConfirmationMessage, setShowConfirmationMessage] = useState(null); 
-  const [showErrorMessage, setShowErrorMessage] = useState(null); // NUOVO STATO
+  const [showErrorMessage, setShowErrorMessage] = useState(null);
 
   const resetFormState = () => {
     setNewEngineName('');
@@ -512,11 +582,15 @@ const App = () => {
     setUniverse({});
     setLogicDetails([]);
     setKpis([]);
-    setDocumentation([]); // Reset del nuovo stato
+    setDocumentation([]);
     setChangeValidityDate('');
   };
   
   const showTemporaryMessage = (message, type = 'success') => {
+      // Pulisce i messaggi precedenti
+      setShowConfirmationMessage(null);
+      setShowErrorMessage(null);
+
       if (type === 'success') {
           setShowConfirmationMessage(message);
           setTimeout(() => setShowConfirmationMessage(null), 5000);
@@ -529,12 +603,13 @@ const App = () => {
   const loadEngineData = (engine) => {
     const latestVersion = engine.versions[engine.versions.length - 1];
     if (latestVersion && latestVersion.data) {
+      // Inizializza gli stati con fallback ad array vuoti per sicurezza
       setStatisticalEngines(latestVersion.data.statisticalEngines || []);
       setExternalEngines(latestVersion.data.externalEngines || []);
       setUniverse(latestVersion.data.universe || {});
       setLogicDetails(latestVersion.data.logicDetails || []);
       setKpis(latestVersion.data.kpis || []);
-      setDocumentation(latestVersion.data.documentation || []); // Carica il nuovo stato
+      setDocumentation(latestVersion.data.documentation || []);
     } else {
         // Se non ci sono versioni, resetta i dati a vuoto
         setStatisticalEngines([]);
@@ -542,15 +617,13 @@ const App = () => {
         setUniverse({});
         setLogicDetails([]);
         setKpis([]);
-        setDocumentation([]); // Reset del nuovo stato
+        setDocumentation([]);
     }
   };
 
   const handleSelectEngine = (engine) => {
     setSelectedEngine(engine);
-    // Quando seleziono un motore, mostro la vista combinata di default
     if (engine) {
-        setTimelineView('combined'); 
         setIsEditing(false);
         setIsCreating(false);
         loadEngineData(engine);
@@ -563,6 +636,16 @@ const App = () => {
         return;
     }
     
+    // Controlla che i dati del form siano validi
+    const initialData = {
+        statisticalEngines: statisticalEngines || [],
+        externalEngines: externalEngines || [],
+        logicDetails: logicDetails || [],
+        universe: universe || {},
+        kpis: kpis || [],
+        documentation: documentation || [],
+    };
+    
     const newEngine = {
       id: crypto.randomUUID(),
       name: newEngineName,
@@ -570,14 +653,9 @@ const App = () => {
       versions: [{
         versionId: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
-        data: {
-          statisticalEngines: statisticalEngines,
-          externalEngines: externalEngines,
-          logicDetails: logicDetails,
-          universe: universe,
-          kpis: kpis,
-          documentation: documentation, // Inclusione del nuovo stato
-        },
+        data: initialData,
+        // La prima versione non ha data di validità a meno che non sia stata impostata nel form di creazione
+        validityDate: changeValidityDate || undefined, 
       }],
     };
     
@@ -595,14 +673,14 @@ const App = () => {
 
     const currentEngine = engines.find(e => e.id === selectedEngine.id);
     const lastVersionTimestamp = currentEngine.versions[currentEngine.versions.length - 1].timestamp;
-    const lastVersionDate = new Date(lastVersionTimestamp).toISOString().split('T')[0]; // Ottieni solo la data YYYY-MM-DD
+    const lastVersionDate = new Date(lastVersionTimestamp).toISOString().split('T')[0];
 
     // 1. Validazione della Data di validità (solo se trackChanges è true)
     if (trackChanges && changeValidityDate) {
         const validityDate = new Date(changeValidityDate);
         const lastModDate = new Date(lastVersionTimestamp);
         
-        // Confronto solo per la data, ignorando l'ora del salvataggio attuale
+        // Confronto solo per la data
         const validityDay = new Date(validityDate.toDateString());
         const lastModDay = new Date(lastModDate.toDateString());
 
@@ -618,8 +696,10 @@ const App = () => {
         logicDetails,
         universe,
         kpis,
-        documentation, // Inclusione del nuovo stato
+        documentation,
     };
+
+    let newSelectedEngine = null; // Per aggiornare lo stato selectedEngine dopo il setEngines
 
     setEngines(prevEngines => prevEngines.map(engine => {
       if (engine.id === selectedEngine.id) {
@@ -644,16 +724,20 @@ const App = () => {
             latestVersion.timestamp = new Date().toISOString(); // Aggiorna il timestamp dell'ultima versione
           }
         }
-        return { ...engine, versions: updatedVersions };
+        newSelectedEngine = { ...engine, versions: updatedVersions };
+        return newSelectedEngine;
       }
       return engine;
     }));
     
     setIsEditing(false);
     setChangeValidityDate(''); // Reset della data dopo il salvataggio
-    // Aggiorna lo stato dei dati mostrati
-    loadEngineData({ ...selectedEngine, versions: trackChanges ? [...selectedEngine.versions, { data: newEngineData, validityDate: changeValidityDate }] : selectedEngine.versions });
-
+    
+    // Ricarica i dati corretti dopo l'aggiornamento dello stato (necessario perché setEngines è asincrono)
+    if (newSelectedEngine) {
+        loadEngineData(newSelectedEngine);
+    }
+    
     showTemporaryMessage("Modifiche salvate con successo. Backup JSON generato.");
     handleExport();
   };
@@ -673,6 +757,7 @@ const App = () => {
   
   const handleConfirmDelete = () => {
     let deletedEngineName = null;
+    let newSelectedEngine = null;
     
     if (isDeletingVersion) {
       setEngines(prevEngines => prevEngines.map(engine => {
@@ -681,25 +766,33 @@ const App = () => {
               deletedEngineName = engine.name;
               const newVersions = engine.versions.slice(0, -1);
               
-              // Se l'engine correntemente selezionato è quello che stiamo modificando
               if (selectedEngine && selectedEngine.id === engineToDeleteId) {
-                  // Ricarica i dati della penultima versione
-                  loadEngineData({ versions: newVersions });
+                  // Prepara i dati della nuova ultima versione per ricaricare
+                  newSelectedEngine = { ...engine, versions: newVersions };
               }
               return { ...engine, versions: newVersions };
+          } else {
+            // Se stiamo per eliminare l'unica versione, il motore viene rimosso
+            // L'eliminazione completa è gestita dal .filter successivo
+            deletedEngineName = engine.name;
           }
         }
         return engine;
       }).filter(engine => engine.versions.length > 0)); // Rimuove motori senza versioni
 
       if (deletedEngineName) {
-        showTemporaryMessage(`OK! L'ultima versione di '${deletedEngineName}' è stata eliminata. Il motore è stato riportato allo stato precedente (Rollback).`);
+        showTemporaryMessage(`OK! L'ultima versione di '${engineToDeleteName}' è stata eliminata. Rollback completato.`);
       }
       
-      // Se stiamo eliminando l'ultima versione di un motore e non rimangono versioni, deselezionalo
-      const currentEngine = engines.find(e => e.id === engineToDeleteId);
-      if (currentEngine && currentEngine.versions.length <= 1) {
-          setSelectedEngine(null);
+      // Aggiorna lo stato selezionato
+      if (newSelectedEngine) {
+          loadEngineData(newSelectedEngine);
+      } else {
+          // Se il motore è stato rimosso (aveva solo 1 versione) o non era selezionato
+          const remainingEngine = engines.find(e => e.id === engineToDeleteId);
+          if (!remainingEngine) {
+              setSelectedEngine(null);
+          }
       }
       
     } else {
@@ -717,7 +810,6 @@ const App = () => {
     setEngineToDeleteName(null);
     setIsDeletingVersion(false);
 
-    // Esporta JSON dopo l'eliminazione
     handleExport();
   };
   
@@ -746,6 +838,7 @@ const App = () => {
     URL.revokeObjectURL(url);
   };
 
+  // Funzione di Import RESILIENTE (FIX)
   const handleImport = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -754,32 +847,38 @@ const App = () => {
     reader.onload = (e) => {
       try {
         const importedEngines = JSON.parse(e.target.result);
-        if (!Array.isArray(importedEngines)) {
-          console.error("Imported file is not a valid JSON array.");
-          return;
+        
+        // ** PASSAGGIO CRITICO: Validazione Strutturale **
+        if (!validateImportedEngines(importedEngines)) {
+            showTemporaryMessage("Errore: Il file JSON non ha la struttura attesa per i motori (Engine ID, Nome, e array Versions con dati). Importazione annullata.", 'error');
+            return;
         }
+
         setEngines(importedEngines);
         // Deseleziona l'engine corrente dopo l'import
         setSelectedEngine(null); 
         resetFormState();
         showTemporaryMessage("Importazione JSON completata con successo!");
       } catch (error) {
-        showTemporaryMessage("Errore durante l'importazione del file JSON.", 'error');
+        showTemporaryMessage("Errore durante la lettura o il parsing del file JSON. Assicurati che sia un JSON valido.", 'error');
         console.error("Error importing file: ", error);
       }
     };
     reader.readAsText(file);
+    // Azzera il valore dell'input file per permettere re-importazioni dello stesso file
+    if (fileInput) {
+        fileInput.value = '';
+    }
   };
 
   const handleImportButtonClick = () => {
     fileInput.click();
   };
   
-  const handleViewDetails = (currentData, previousData) => {
-    // Se previousData non è disponibile (es. versione iniziale) non fare il dettaglio
-    if (!previousData) return; 
-    const details = getDetailedChanges(currentData, previousData);
-    setChangeDetails(details);
+  // Passa l'intera versione (currentVersion, previousVersion)
+  const handleViewDetails = (currentVersion, previousVersion) => {
+    if (!previousVersion) return; 
+    setChangeDetails({ currentVersion, previousVersion });
     setIsModalOpen(true);
   };
 
@@ -788,22 +887,19 @@ const App = () => {
     setChangeDetails(null);
   };
 
-  // Funzione non più necessaria, ma mantenuta per pulizia
-  const handleBackToList = () => {
-    setTimelineView('combined'); 
-  };
-
-  // Funzioni di supporto per dati basati su array (Statistico, Esterno, Logica, Impatto)
-  // MODIFICATO: Inserisce il nuovo elemento in testa all'array
+  // Funzioni di supporto per dati basati su array
   const addEntry = (setter, emptyEntry) => setter(prev => [emptyEntry, ...prev]);
   
   const updateEntry = (setter, index, key, value) => {
     setter(prev => {
       const newArray = [...prev];
-      newArray[index] = { ...newArray[index], [key]: value };
+      if(newArray[index]) { // Controllo per prevenire errori se l'indice è fuori range
+          newArray[index] = { ...newArray[index], [key]: value };
+      }
       return newArray;
     });
   };
+  
   const deleteEntry = (setter, index) => setter(prev => prev.filter((_, i) => i !== index));
 
   if (loading) {
@@ -827,6 +923,8 @@ const App = () => {
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
       <style>{`
         body { font-family: 'Inter', sans-serif; }
+        .animate-bounce { animation: bounce 0.5s ease-in-out; }
+        @keyframes bounce { 0%, 100% { transform: translateY(-5%); } 50% { transform: translateY(0); } }
       `}</style>
 
       {/* MODALE DI CONFERMA ELIMINAZIONE/ROLLBACK */}
@@ -838,23 +936,22 @@ const App = () => {
         />
       )}
       
-      {/* MESSAGGIO DI CONFERMA OK */}
+      {/* MESSAGGIO DI CONFERMA/ERRORE */}
       {showConfirmationMessage && (
-        <div className="fixed top-4 right-4 bg-green-500 text-white p-4 rounded-lg shadow-xl z-50 animate-bounce">
+        <div className="fixed top-4 right-4 bg-green-600 text-white p-4 rounded-lg shadow-xl z-50 transition-all duration-300">
             {showConfirmationMessage}
         </div>
       )}
       
-      {/* MESSAGGIO DI ERRORE */}
       {showErrorMessage && (
-        <div className="fixed top-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-xl z-50 animate-bounce">
+        <div className="fixed top-4 right-4 bg-red-600 text-white p-4 rounded-lg shadow-xl z-50 transition-all duration-300">
             {showErrorMessage}
         </div>
       )}
 
 
-      <div className="lg:w-1/4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
-        <h2 className="text-2xl font-bold mb-4">Motori di Rischio</h2>
+      <div className="lg:w-1/4 w-full p-4 bg-white dark:bg-gray-800 rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
+        <h2 className="text-2xl font-bold mb-4 border-b pb-2 dark:border-gray-700">Gestione Motori</h2>
         <div className="flex flex-col space-y-2 mb-4">
           <button
             onClick={() => {
@@ -862,13 +959,13 @@ const App = () => {
               setSelectedEngine(null);
               resetFormState();
             }}
-            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-lg hover:shadow-xl"
           >
             Crea Nuovo Motore
           </button>
           <button
             onClick={handleImportButtonClick}
-            className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+            className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-lg hover:shadow-xl"
           >
             Importa da JSON
           </button>
@@ -881,175 +978,203 @@ const App = () => {
           />
           <button
             onClick={handleExport}
-            className="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-lg hover:shadow-xl"
           >
             Esporta in JSON
           </button>
         </div>
-        <ul className="space-y-2 max-h-[70vh] overflow-y-auto">
-          {engines.map(engine => (
-            <li key={engine.id}>
-              <div
-                className={`p-3 rounded-lg cursor-pointer transition-colors border-2 ${selectedEngine && selectedEngine.id === engine.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900' : 'border-transparent hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-                onClick={() => handleSelectEngine(engine)}
-                onDoubleClick={() => {
-                    handleSelectEngine(engine);
-                    setIsEditing(true);
-                }}
-              >
-                <div className="font-semibold">{engine.name}</div>
-                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{engine.description}</p>
-              </div>
-            </li>
-          ))}
+        <h3 className="text-xl font-semibold mb-2">Lista Motori ({engines.length})</h3>
+        <ul className="space-y-2 overflow-y-auto pr-2 flex-grow">
+          {engines.length === 0 ? (
+              <p className="text-gray-500 italic p-4 text-center">Nessun motore trovato. Inizia creando o importando!</p>
+          ) : (
+              engines.map(engine => (
+                <li key={engine.id}>
+                  <div
+                    className={`p-3 rounded-lg cursor-pointer transition-colors border-2 ${selectedEngine && selectedEngine.id === engine.id ? 'border-blue-500 bg-blue-100 dark:bg-blue-900 shadow-md' : 'border-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                    onClick={() => handleSelectEngine(engine)}
+                    onDoubleClick={() => {
+                        handleSelectEngine(engine);
+                        setIsEditing(true);
+                    }}
+                  >
+                    <div className="font-semibold">{engine.name}</div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{engine.description}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Versioni: {engine.versions.length}</p>
+                  </div>
+                </li>
+              ))
+          )}
         </ul>
       </div>
 
-      <div className="flex-1 p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
+      <div className="flex-1 p-6 bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
         {showEngineDetails ? (
           <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">{isCreating ? 'Nuovo Motore' : selectedEngine.name}</h2>
-              <div className="space-x-2">
+            <div className="flex flex-wrap justify-between items-center mb-6 border-b pb-4 dark:border-gray-700">
+              <h2 className="text-3xl font-extrabold text-gray-800 dark:text-gray-100">{isCreating ? 'Nuovo Motore' : selectedEngine.name}</h2>
+              <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
                   {isEditing && (
                       <button
-                           onClick={() => {
-                           setIsEditing(prev => !prev);
-                           // Ricarica i dati dell'ultima versione se si esce dalla modalità di modifica
-                           if (isEditing) {
-                               loadEngineData(selectedEngine);
-                           }
-                         }}
-                         className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-                       >
-                           Visualizza Cronologia
-                       </button>
+                          onClick={() => {
+                              setIsEditing(false);
+                              // Ricarica i dati dell'ultima versione se si esce dalla modalità di modifica
+                              if (selectedEngine) {
+                                  loadEngineData(selectedEngine);
+                              } else {
+                                  resetFormState();
+                              }
+                          }}
+                          className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm shadow-md"
+                      >
+                          Visualizza Cronologia
+                      </button>
                   )}
-                   {isCreating && (
-                       <button
-                           onClick={() => {
-                           setIsCreating(false);
-                           resetFormState();
-                           }}
-                           className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-                       >
-                           Indietro
-                       </button>
-                   )}
-                   {selectedEngine && !isCreating && (
-                       <button
-                         onClick={() => handleDeleteEngineConfirm(selectedEngine.id)}
-                         className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-                       >
-                         Elimina Motore
-                       </button>
-                   )}
+                  {isCreating && (
+                      <button
+                          onClick={() => {
+                              setIsCreating(false);
+                              resetFormState();
+                          }}
+                          className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm shadow-md"
+                      >
+                          Annulla Creazione
+                      </button>
+                  )}
+                  {selectedEngine && !isCreating && (
+                      <button
+                          onClick={() => handleDeleteEngineConfirm(selectedEngine.id)}
+                          className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm shadow-md"
+                      >
+                          Elimina Motore
+                      </button>
+                  )}
               </div>
             </div>
 
-            {isCreating ? (
-                <>
+            {/* Campi Nome e Descrizione per la creazione */}
+            {isCreating && (
+                <div className="space-y-4 mb-8 p-4 bg-blue-50 dark:bg-blue-900/50 rounded-lg border-l-4 border-blue-500">
                     <div className="mb-4">
-                        <label className="block text-sm font-semibold mb-2">Nome Motore</label>
+                        <label className="block text-sm font-semibold mb-2">Nome Motore (Obbligatorio)</label>
                         <input
                             type="text"
                             value={newEngineName}
                             onChange={(e) => setNewEngineName(e.target.value)}
-                            className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600"
+                            className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500"
                         />
                     </div>
                     <div className="mb-4">
-                        <label className="block text-sm font-semibold mb-2">Descrizione</label>
+                        <label className="block text-sm font-semibold mb-2">Descrizione Breve</label>
                         <textarea
                             value={newEngineDesc}
                             onChange={(e) => setNewEngineDesc(e.target.value)}
-                            className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24"
+                            className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-16 focus:ring-blue-500 focus:border-blue-500 resize-y"
+                        />
+                    </div>
+                     <div className="mb-4">
+                        <label className="block text-sm font-semibold mb-2">Data di validità iniziale (Opzionale)</label>
+                        <input
+                            type="date"
+                            value={changeValidityDate}
+                            onChange={(e) => setChangeValidityDate(e.target.value)}
+                            className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600"
                         />
                     </div>
                     <button
                         onClick={handleCreateEngine}
-                        className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors mr-2"
+                        className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-lg"
+                        disabled={!newEngineName}
                     >
-                        Salva Motore
+                        Crea e Salva
                     </button>
-                </>
-            ) : (
-                <>
-                {/* Sezione Modifica/Salvataggio */}
-                {isEditing && (
-                  <div className="space-y-6 mb-6 p-4 border border-gray-300 dark:border-gray-600 rounded-lg">
-                    <div className="mb-4">
-                      <label className="block text-sm font-semibold mb-2">Data di validità della modifica</label>
-                      <input
-                        type="date"
-                        value={changeValidityDate}
-                        onChange={(e) => setChangeValidityDate(e.target.value)}
-                        className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                          Inserisci la data di validità per il tracciamento. Deve essere successiva all'ultima data di modifica.
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleUpdateEngine(true)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Salva con tracciamento</button>
-                      <button onClick={() => handleUpdateEngine(false)} className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg">Salva senza tracciamento (Sovrascrive l'ultima versione)</button>
-                      <button onClick={() => {
-                        setIsEditing(false);
-                        loadEngineData(selectedEngine); // Annulla ripristinando l'ultima versione
-                      }} className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Annulla</button>
-                    </div>
-                  </div>
-                )}
-                <EngineDetails
-                  statisticalEngines={statisticalEngines}
-                  setStatisticalEngines={setStatisticalEngines}
-                  externalEngines={externalEngines}
-                  setExternalEngines={setExternalEngines}
-                  universe={universe}
-                  setUniverse={setUniverse}
-                  logicDetails={logicDetails}
-                  setLogicDetails={setLogicDetails}
-                  kpis={kpis}
-                  setKpis={setKpis}
-                  documentation={documentation} // Passa il nuovo stato
-                  setDocumentation={setDocumentation} // Passa il setter
-                  isEditing={isEditing}
-                  addEntry={addEntry}
-                  updateEntry={updateEntry}
-                  deleteEntry={deleteEntry}
-                />
-                </>
+                </div>
             )}
+            
+            {/* Sezione Modifica/Salvataggio */}
+            {isEditing && (
+              <div className="space-y-4 mb-8 p-4 border border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/20 rounded-xl shadow-inner">
+                <h3 className="text-xl font-bold text-blue-500">Opzioni di Salvataggio</h3>
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold mb-2">Data di validità della modifica (YYYY-MM-DD)</label>
+                  <input
+                    type="date"
+                    value={changeValidityDate}
+                    onChange={(e) => setChangeValidityDate(e.target.value)}
+                    className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                      Se specificata e successiva, crea una nuova versione (Tracciamento). Altrimenti, salva come sovrascrittura.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <button onClick={() => handleUpdateEngine(!!changeValidityDate)} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-md text-sm flex-1 min-w-[200px]">
+                      Salva e {!changeValidityDate ? 'Sovrascrivi Ultima' : 'Crea Nuova Versione'}
+                  </button>
+                  <button onClick={() => handleUpdateEngine(false)} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-md text-sm flex-1 min-w-[200px]">
+                      Sovrascrivi Ultima Versione (Ignora Data)
+                  </button>
+                  <button onClick={() => {
+                    setIsEditing(false);
+                    loadEngineData(selectedEngine); // Annulla ripristinando l'ultima versione
+                  }} className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-md text-sm flex-1 min-w-[100px]">Annulla</button>
+                </div>
+              </div>
+            )}
+            <EngineDetails
+              statisticalEngines={statisticalEngines}
+              setStatisticalEngines={setStatisticalEngines}
+              externalEngines={externalEngines}
+              setExternalEngines={setExternalEngines}
+              universe={universe}
+              setUniverse={setUniverse}
+              logicDetails={logicDetails}
+              setLogicDetails={setLogicDetails}
+              kpis={kpis}
+              setKpis={setKpis}
+              documentation={documentation}
+              setDocumentation={setDocumentation}
+              isEditing={isEditing || isCreating}
+              addEntry={addEntry}
+              updateEntry={updateEntry}
+              deleteEntry={deleteEntry}
+            />
           </div>
         ) : (
           <div>
-            <div className="flex justify-between items-center mb-4">
-               <h2 className="text-3xl font-bold">Cronologia Motori</h2>
+            <div className="flex justify-between items-center mb-4 border-b pb-4 dark:border-gray-700">
+               <h2 className="text-3xl font-extrabold">Visualizzazione Cronologia</h2>
                <div className="space-x-2">
-                   {selectedEngine && (
-                       <button
-                           onClick={() => setIsEditing(true)}
-                           className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-                       >
-                           Modifica Motore
-                       </button>
-                   )}
-                   {/* Ho rimosso il pulsante "Elimina Ultima Versione" da qui perché è ora gestito elemento per elemento nella lista AllEnginesTimeline */}
+                    {selectedEngine && (
+                        <button
+                            onClick={() => setIsEditing(true)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-lg"
+                        >
+                            Modifica Engine Corrente
+                        </button>
+                    )}
                </div>
             </div>
-            
-            <AllEnginesTimeline 
-                engines={engines} 
-                onShowDetails={handleViewDetails} 
-                onDeleteVersion={handleDeleteVersionConfirm} // Passiamo la funzione aggiornata
-            />
+            {engines.length === 0 ? (
+                <p className="text-center text-gray-500 dark:text-gray-400 p-16">Seleziona o crea un motore sulla sinistra per visualizzare i dettagli e la cronologia.</p>
+            ) : (
+                <AllEnginesTimeline 
+                    engines={engines} 
+                    onShowDetails={handleViewDetails} 
+                    onDeleteVersion={handleDeleteVersionConfirm} 
+                />
+            )}
           </div>
         )}
       </div>
-      {isModalOpen && (
-        <ChangeDetailsModal changes={changeDetails} onClose={closeModal} />
+      {isModalOpen && changeDetails && (
+        <ChangeDetailsModal 
+            currentVersion={changeDetails.currentVersion} 
+            previousVersion={changeDetails.previousVersion} 
+            onClose={closeModal} 
+        />
       )}
-      </div>
+    </div>
   );
 };
 
