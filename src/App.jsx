@@ -533,10 +533,14 @@ const App = () => {
         },
       }],
     };
+    
     setEngines(prevEngines => [...prevEngines, newEngine]);
     resetFormState();
     setIsCreating(false);
     setSelectedEngine(newEngine); // Seleziona il motore appena creato
+    
+    // Esporta JSON dopo la creazione
+    handleExport(); 
   };
 
   const handleUpdateEngine = (trackChanges) => {
@@ -582,6 +586,9 @@ const App = () => {
     setChangeValidityDate(''); // Reset della data dopo il salvataggio
     // Aggiorna lo stato dei dati mostrati
     loadEngineData({ ...selectedEngine, versions: trackChanges ? [...selectedEngine.versions, { data: newEngineData, validityDate: changeValidityDate }] : selectedEngine.versions });
+
+    // *** MODIFICA EFFETTUATA QUI: Chiama l'esportazione dopo il salvataggio ***
+    handleExport();
   };
 
   const handleDeleteEngineConfirm = (engineId) => {
@@ -646,6 +653,9 @@ const App = () => {
     setEngineToDeleteId(null);
     setEngineToDeleteName(null);
     setIsDeletingVersion(false);
+
+    // Esporta JSON dopo l'eliminazione
+    handleExport();
   };
   
   const handleCancelDelete = () => {
@@ -671,6 +681,9 @@ const App = () => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    
+    // Aggiungi un feedback visivo se necessario, ma non interrompere il flusso
+    console.log(`Esportato il backup: ${filename}`);
   };
 
   const handleImport = (event) => {
