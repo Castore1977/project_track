@@ -192,18 +192,16 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onBackToList })
   const getVersionsByDate = (date) => {
     const versions = [];
     
-    // Determina quali motori considerare in base al filtro
-    let targetEngines = engines;
-    if (filterEngineId !== 'all') {
-      const filteredEngine = engines.find(e => e.id === filterEngineId);
-      targetEngines = filteredEngine ? [filteredEngine] : [];
-    }
-    // Se è selezionato un singolo motore, ma il filtro è su 'all', usiamo tutti i motori
-    // Selezioniamo tutti i motori se il filtro è 'all'
+    // Logica di filtraggio semplificata e pulita
+    let targetEngines = [];
     if (filterEngineId === 'all') {
-        targetEngines = engines;
+      targetEngines = engines;
+    } else {
+      const filteredEngine = engines.find(e => e.id === filterEngineId);
+      if (filteredEngine) {
+          targetEngines = [filteredEngine];
+      }
     }
-
 
     targetEngines.forEach(engine => {
       engine.versions.forEach((version, index) => {
@@ -230,7 +228,7 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onBackToList })
   };
 
   return (
-    <div className="p-4 overflow-x-auto">
+    <div className="p-4"> 
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-2xl font-bold">Visualizzazione Calendario</h3>
         <button
@@ -250,44 +248,51 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onBackToList })
           {engines.map(engine => <option key={engine.id} value={engine.id}>{engine.name}</option>)}
         </select>
       </div>
-
-      <div className="w-full min-w-[768px]">
-        {/* Intestazioni Mesi */}
-        <div className="flex">
-            {Object.values(months).map((month, index) => (
-            <div key={index} className="text-center font-bold text-lg text-gray-700 dark:text-gray-300 border-b border-gray-400" 
-                style={{ flexBasis: `${month.count * 32}px`, minWidth: `${month.count * 32}px` }}>
-                {month.month} {month.year}
-            </div>
-            ))}
-        </div>
-        {/* Intestazioni Giorni */}
-        <div className="flex">
-            {dates.map((date, index) => (
-            <div key={index} className="flex-1 text-center font-semibold text-sm text-gray-500 min-w-[32px]">{date.getDate()}</div>
-            ))}
-        </div>
-        {/* Corpo della Timeline con Scroll Orizzontale */}
-        <div className="flex border-l border-t border-b rounded-lg bg-gray-50 dark:bg-gray-700">
-            {dates.map((date, index) => {
-            const mods = getVersionsByDate(date);
-            return (
-                <div key={index} 
-                    className="flex-1 flex flex-col items-center justify-start p-1 border-r border-gray-200 dark:border-gray-600 min-w-[32px] min-h-[100px] gap-1 overflow-y-auto"
-                >
-                {mods.map((mod, modIndex) => (
-                    <div 
-                    key={modIndex} 
-                    onClick={() => onShowDetails(mod.version.data, mod.previousVersion?.data)} 
-                    className={`w-full text-center text-xs mt-1 p-1 rounded-lg text-white cursor-pointer hover:opacity-80 transition-opacity ${getEngineColor(mod.engineName)}`}
-                    title={`${mod.engineName} - Valido da: ${mod.version.validityDate || 'Non specificato'}`}
-                    >
-                    {mod.engineName.substring(0, 3)}
-                    </div>
-                ))}
+      
+      {/* Wrapper per lo scorrimento orizzontale */}
+      <div className="overflow-x-auto pb-4">
+        {/* Usiamo w-full e min-w-[768px] sui container delle date per forzare la larghezza e abilitare lo scroll orizzontale */}
+        <div className="min-w-[768px]"> 
+            
+            {/* Intestazioni Mesi */}
+            <div className="flex w-full"> 
+                {Object.values(months).map((month, index) => (
+                <div key={index} className="text-center font-bold text-lg text-gray-700 dark:text-gray-300 border-b border-gray-400" 
+                    style={{ flexBasis: `${month.count * 32}px`, minWidth: `${month.count * 32}px` }}>
+                    {month.month} {month.year}
                 </div>
-            );
-            })}
+                ))}
+            </div>
+            
+            {/* Intestazioni Giorni */}
+            <div className="flex w-full">
+                {dates.map((date, index) => (
+                <div key={index} className="flex-1 text-center font-semibold text-sm text-gray-500 min-w-[32px]">{date.getDate()}</div>
+                ))}
+            </div>
+            
+            {/* Corpo della Timeline con Scroll Verticale per Giorno */}
+            <div className="flex w-full border-l border-t border-b rounded-lg bg-gray-50 dark:bg-gray-700">
+                {dates.map((date, index) => {
+                const mods = getVersionsByDate(date);
+                return (
+                    <div key={index} 
+                        className="flex-1 flex flex-col items-center justify-start p-1 border-r border-gray-200 dark:border-gray-600 min-w-[32px] min-h-[150px] gap-1 overflow-y-auto" 
+                    >
+                    {mods.map((mod, modIndex) => (
+                        <div 
+                        key={modIndex} 
+                        onClick={() => onShowDetails(mod.version.data, mod.previousVersion?.data)} 
+                        className={`w-full text-center text-xs mt-1 p-1 rounded-lg text-white cursor-pointer hover:opacity-80 transition-opacity ${getEngineColor(mod.engineName)}`}
+                        title={`${mod.engineName} - Valido da: ${mod.version.validityDate || 'Non specificato'}`}
+                        >
+                        {mod.engineName.substring(0, 3)}
+                        </div>
+                    ))}
+                    </div>
+                );
+                })}
+            </div>
         </div>
       </div>
     </div>
