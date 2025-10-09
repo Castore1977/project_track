@@ -26,24 +26,17 @@ const compareArrayChanges = (currentArray, previousArray, sectionName, uniqueKey
   return changes;
 };
 
-// Funzione di riepilogo modificata per essere più concisa
+// Funzione di riepilogo aggiornata per essere più dettagliata per elemento
 const getChangesSummary = (currentVersion, previousVersion) => {
   const allChanges = [];
 
   const summarizeChanges = (currentArray, previousArray, sectionName) => {
       const changes = compareArrayChanges(currentArray, previousArray, sectionName);
-      if (changes.length > 0) {
-          const added = changes.filter(c => c.startsWith('Aggiunto')).length;
-          const removed = changes.filter(c => c.startsWith('Rimosso')).length;
-          const modified = changes.filter(c => c.startsWith('Modificato')).length;
-
-          let summary = '';
-          if (added > 0) summary += `Aggiunti: ${added} ${sectionName}${added > 1 ? 's' : ''}. `;
-          if (removed > 0) summary += `Rimossi: ${removed} ${sectionName}${removed > 1 ? 's' : ''}. `;
-          if (modified > 0) summary += `Modificati: ${modified} ${sectionName}${modified > 1 ? 's' : ''}. `;
-          
-          if (summary) allChanges.push(summary.trim());
-      }
+      
+      changes.forEach(change => {
+          // La funzione compareArrayChanges restituisce già stringhe nel formato "Aggiunto [Sezione]: [Nome Elemento]"
+          allChanges.push(`[${sectionName}] ${change.split(': ').slice(0, 1).join(': ')}: ${change.split(': ').slice(1).join(': ')}`);
+      });
   };
 
   const current = currentVersion.data;
@@ -51,7 +44,7 @@ const getChangesSummary = (currentVersion, previousVersion) => {
 
   // 1. Universo di Applicazione
   if (JSON.stringify(current.universe) !== JSON.stringify(previous.universe)) {
-    allChanges.push('Modificato: Universo di Applicazione.');
+    allChanges.push('[Universo] Modificato: Contenuto aggiornato.');
   }
   
   // 2. Motori statistici
@@ -64,14 +57,14 @@ const getChangesSummary = (currentVersion, previousVersion) => {
   summarizeChanges(current.logicDetails, previous.logicDetails, 'Logica');
 
   // 5. Impatti (KPI)
-  summarizeChanges(current.kpis, previous.kpis, 'Impatto (KPI)');
+  summarizeChanges(current.kpis, previous.kpis, 'KPI');
 
   // 6. Data di validità (prioritaria)
   if (currentVersion.validityDate !== previousVersion.validityDate) {
     allChanges.unshift(`Data di validità: ${previousVersion.validityDate || 'non definita'} -> ${currentVersion.validityDate || 'non definita'}`);
   }
 
-  // Se ci sono modifiche, restituisce un riepilogo conciso, altrimenti 'Nessuna modifica'
+  // Restituisce il riepilogo
   return allChanges.length > 0 ? allChanges : ['Nessuna modifica tracciata.'];
 };
 
@@ -233,14 +226,14 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
                                     )}
                                 </div>
                                 
-                                <p className="text-sm text-gray-700 dark:text-gray-300">
+                                <p className="text-sm text-gray-700 dark:text-gray-300 flex flex-wrap gap-x-4">
                                     <span className="font-medium">Creazione:</span> {new Date(version.timestamp).toLocaleString()} 
                                     {version.validityDate && (
-                                        <span className="ml-4 font-bold text-orange-600 dark:text-orange-400">| Valido da: {version.validityDate}</span>
+                                        <span className="font-bold text-orange-600 dark:text-orange-400">| Valido da: {version.validityDate}</span>
                                     )}
                                 </p>
                                 
-                                <ul className="list-inside text-sm text-gray-800 dark:text-gray-200">
+                                <ul className="list-inside text-sm text-gray-800 dark:text-gray-200 space-y-0.5">
                                     {changes.map((change, i) => (
                                         <li key={i} className="truncate">{change}</li>
                                     ))}
@@ -722,7 +715,9 @@ const App = () => {
   };
 
   // Funzioni di supporto per dati basati su array (Statistico, Esterno, Logica, Impatto)
-  const addEntry = (setter, emptyEntry) => setter(prev => [...prev, emptyEntry]);
+  // MODIFICATO: Inserisce il nuovo elemento in testa all'array
+  const addEntry = (setter, emptyEntry) => setter(prev => [emptyEntry, ...prev]);
+  
   const updateEntry = (setter, index, key, value) => {
     setter(prev => {
       const newArray = [...prev];
