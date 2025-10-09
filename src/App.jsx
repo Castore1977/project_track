@@ -512,6 +512,19 @@ const EngineDetails = ({ engines, currentEngineId, statisticalEngines, setStatis
     const updateStatisticalEngine = createArrayUpdater(setStatisticalEngines);
     const updateExternalEngine = createArrayUpdater(setExternalEngines);
 
+    // Funzione per l'aggiunta di un documento locale
+    const handleFileSelection = (event, index, setter) => {
+        const file = event.target.files[0];
+        if (file) {
+            const fileName = file.name;
+            // Usiamo il nome del file come nome e un percorso simulato come URL
+            setter(index, 'name', fileName);
+            setter(index, 'url', `file:///${fileName}`); // Percorso simulato
+        }
+        // Resetta il valore dell'input per permettere la rislezione dello stesso file
+        event.target.value = '';
+    };
+
     return (
     <div className="space-y-8 mt-8">
       {/* Sezione Universo di Applicazione - RESALTATA */}
@@ -644,25 +657,59 @@ const EngineDetails = ({ engines, currentEngineId, statisticalEngines, setStatis
           <h3 className="text-2xl font-bold text-indigo-500">6. Documentazione</h3>
           {isEditing && <button onClick={() => addEntry(setDocumentation, { name: '', url: '' })} className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors shadow-md">+</button>}
         </div>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Aggiungi link a documenti o specifiche. Nota: l'accesso ai file locali è bloccato dai browser.</p>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Aggiungi link (URL) o seleziona un file locale. **Attenzione:** i browser bloccano l'apertura diretta dei file locali (cliccando su "Apri" funzionerà solo per gli URL http/https).</p>
         <div className="space-y-4">
           {documentation.length === 0 && !isEditing ? <p className="text-gray-500 italic">Nessun documento collegato.</p> : documentation.map((doc, index) => (
             <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
               <label className="block text-sm font-semibold mb-1">Nome Documento</label>
               <input type="text" value={doc.name} onChange={(e) => updateEntry(setDocumentation, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Nome del documento" />
-              <label className="block text-sm font-semibold mt-2 mb-1">Link / URL</label>
+              
+              <label className="block text-sm font-semibold mt-2 mb-1">Link / Percorso File</label>
               <div className="flex items-center gap-2">
-                  {/* Usa un placeholder per URL vuoti per evitare avvisi nel campo di input */}
                   <input 
                       type="text" 
                       value={doc.url} 
                       onChange={(e) => updateEntry(setDocumentation, index, 'url', e.target.value)} 
                       disabled={!isEditing} 
                       className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500" 
-                      placeholder="https://esempio.com/documento.pdf"
+                      placeholder="https://esempio.com/documento.pdf o percorso locale simulato"
                   />
+                  {/* Pulsante per selezionare il file */}
+                  {isEditing && (
+                      <>
+                          <input
+                              type="file"
+                              id={`file-upload-${index}`}
+                              className="hidden"
+                              onChange={(e) => handleFileSelection(e, index, createArrayUpdater(setDocumentation))}
+                          />
+                          <label 
+                              htmlFor={`file-upload-${index}`}
+                              className="bg-purple-500 hover:bg-purple-600 text-white py-1 px-3 rounded-lg text-sm flex-shrink-0 transition-colors shadow-sm cursor-pointer"
+                              title="Seleziona un file locale (solo nome e percorso simulato verranno salvati)"
+                          >
+                              Scegli File
+                          </label>
+                      </>
+                  )}
+                  {/* Pulsante per aprire (funziona solo per URL esterni) */}
                   {doc.url && (
-                    <a href={doc.url.startsWith('http') ? doc.url : `http://${doc.url}`} target="_blank" rel="noopener noreferrer" className="bg-indigo-500 hover:bg-indigo-600 text-white py-1 px-3 rounded-lg text-sm flex-shrink-0 transition-colors shadow-sm" title="Apri Link">Apri</a>
+                    <a 
+                        href={doc.url.startsWith('http') || doc.url.startsWith('https') ? doc.url : '#'} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        onClick={(e) => {
+                            if (doc.url.startsWith('file://')) {
+                                e.preventDefault();
+                                console.warn(`Accesso bloccato: Non è possibile aprire file locali (${doc.url}) a causa delle restrizioni di sicurezza del browser.`);
+                                alert(`Attenzione! Non è possibile aprire file locali (${doc.url}) a causa delle restrizioni di sicurezza del browser. Cliccando "Apri" funziona solo per gli URL web.`);
+                            }
+                        }}
+                        className={`py-1 px-3 rounded-lg text-sm flex-shrink-0 transition-colors shadow-sm font-bold ${doc.url.startsWith('http') || doc.url.startsWith('https') ? 'bg-indigo-500 hover:bg-indigo-600 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-gray-100 cursor-default'}`}
+                        title={doc.url.startsWith('http') || doc.url.startsWith('https') ? "Apri Link Web" : "Accesso bloccato (file locale)"}
+                    >
+                        Apri
+                    </a>
                   )}
               </div>
               {isEditing && <button onClick={() => deleteEntry(setDocumentation, index)} className="mt-2 text-red-500 text-sm hover:underline">Rimuovi</button>}
