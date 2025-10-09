@@ -176,14 +176,15 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
                             : ['Versione iniziale del motore.'];
 
                         const engineColorClass = getEngineColor(version.engineId);
-                        const isLatestVersion = index === 0 && filterEngineId === 'all'; // Evidenzia la più recente se non filtrato
+                        const isLatestVersionOfEngine = version.versionIndex === version.engineVersions.length - 1; // Verifica se è l'ultima versione di quel motore
 
                         return (
                             <div 
                                 key={version.versionId} 
-                                className={`p-4 rounded-lg shadow-md cursor-pointer transition-transform flex items-start space-x-4 
-                                            ${isLatestVersion ? 'ring-2 ring-purple-400 bg-purple-50 dark:bg-purple-900 hover:scale-[1.01]' : 'hover:scale-[1.01]'}
+                                className={`p-4 rounded-lg shadow-md transition-transform flex items-start space-x-4 
+                                            ${isLatestVersionOfEngine && filterEngineId !== version.engineId ? 'ring-2 ring-purple-400' : ''}
                                             ${engineColorClass} bg-opacity-10 dark:bg-opacity-20`}
+                                // Gestione del click per i dettagli
                                 onClick={() => {
                                     if(previousVersion) {
                                         onShowDetails(version.data, previousVersion.data);
@@ -192,13 +193,29 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
                             >
                                 <div className={`w-3 h-3 rounded-full ${engineColorClass} flex-shrink-0 mt-1.5`}></div>
                                 <div className="flex-1">
-                                    <h4 className={`font-semibold text-lg ${engineColorClass.replace('bg-', 'text-')}`}>
-                                        {version.engineName} - Versione {version.versionIndex + 1}
-                                    </h4>
+                                    <div className="flex justify-between items-start">
+                                        <h4 className={`font-semibold text-lg ${engineColorClass.replace('bg-', 'text-')}`}>
+                                            {version.engineName} - Versione {version.versionIndex + 1}
+                                        </h4>
+                                        
+                                        {/* Bottone Rollback (visibile solo se non è la versione iniziale) */}
+                                        {version.versionIndex > 0 && isLatestVersionOfEngine && (
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // Evita di aprire il modale dei dettagli
+                                                    onDeleteVersion(version.engineId, version.engineName);
+                                                }}
+                                                className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-lg text-xs transition-colors shadow-md ml-4"
+                                            >
+                                                Rollback (Elimina Ultima)
+                                            </button>
+                                        )}
+                                    </div>
+
                                     <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                                         Data Creazione: {new Date(version.timestamp).toLocaleString()}
                                         {version.validityDate && ` | Valido da: ${version.validityDate}`}
-                                        {isLatestVersion && <span className="ml-2 font-bold text-purple-600 dark:text-purple-400">(ULTIMA TOTALE)</span>}
+                                        {isLatestVersionOfEngine && <span className="ml-2 font-bold text-green-600 dark:text-green-400">(ULTIMA DEL MOTORE)</span>}
                                     </p>
                                     <ul className="list-disc list-inside text-sm mt-2 text-gray-800 dark:text-gray-200 space-y-1">
                                         {/* Mostra solo il primo elemento per una sintesi concisa */}
@@ -226,7 +243,7 @@ const Timeline = ({ versions, onShowDetails, onDeleteVersion }) => {
         <h3 className="text-2xl font-bold">Cronologia del Motore Corrente (Vista Deprecata)</h3>
         {versions.length > 1 && (
           <button 
-            onClick={onDeleteVersion} 
+            onClick={() => onDeleteVersion(versions[0].engineId, versions[0].engineName)} 
             className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm"
           >
             Elimina Ultima Versione
@@ -428,12 +445,14 @@ const App = () => {
   // Stati del modale e della vista
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [timelineView, setTimelineView] = useState('combined'); // Fissato a 'combined'
+  const [timelineView, setTimelineView] = useState('combined'); 
   const [changeDetails, setChangeDetails] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingVersion, setIsDeletingVersion] = useState(false);
   const [engineToDeleteId, setEngineToDeleteId] = useState(null);
+  const [engineToDeleteName, setEngineToDeleteName] = useState(null); // Nuovo stato per il nome del motore
+  const [showConfirmationMessage, setShowConfirmationMessage] = useState(null); // Nuovo stato per il messaggio OK
 
   const resetFormState = () => {
     setNewEngineName('');
@@ -551,45 +570,68 @@ const App = () => {
     setShowDeleteConfirm(true);
   };
 
-  const handleDeleteVersionConfirm = () => {
+  const handleDeleteVersionConfirm = (engineId, engineName) => {
+    setEngineToDeleteId(engineId);
+    setEngineToDeleteName(engineName);
     setIsDeletingVersion(true);
     setShowDeleteConfirm(true);
   };
   
   const handleConfirmDelete = () => {
+    let deletedEngineName = null;
+    
     if (isDeletingVersion) {
       setEngines(prevEngines => prevEngines.map(engine => {
-        if (engine.id === selectedEngine.id) {
-          const newVersions = engine.versions.slice(0, -1);
-          // Ricarica i dati della penultima versione se esiste
-          if (newVersions.length > 0) {
-            loadEngineData({ versions: newVersions });
-          } else {
-            // Se non rimangono versioni, pulisci i dati
-              resetFormState();
+        if (engine.id === engineToDeleteId) {
+          if (engine.versions.length > 1) {
+              deletedEngineName = engine.name;
+              const newVersions = engine.versions.slice(0, -1);
+              
+              // Se l'engine correntemente selezionato è quello che stiamo modificando
+              if (selectedEngine && selectedEngine.id === engineToDeleteId) {
+                  // Ricarica i dati della penultima versione
+                  loadEngineData({ versions: newVersions });
+              }
+              return { ...engine, versions: newVersions };
           }
-          return { ...engine, versions: newVersions };
         }
         return engine;
-      }));
+      }).filter(engine => engine.versions.length > 0)); // Rimuove motori senza versioni
+
+      if (deletedEngineName) {
+        // Mostra il messaggio OK esplicito
+        setShowConfirmationMessage(`OK! L'ultima versione di '${deletedEngineName}' è stata eliminata. Il motore è stato riportato allo stato precedente.`);
+        setTimeout(() => setShowConfirmationMessage(null), 5000); // Nascondi dopo 5 secondi
+      }
       
-      const currentEngine = engines.find(e => e.id === selectedEngine.id);
+      // Se stiamo eliminando l'ultima versione di un motore e non rimangono versioni, deselezionalo
+      const currentEngine = engines.find(e => e.id === engineToDeleteId);
       if (currentEngine && currentEngine.versions.length <= 1) {
           setSelectedEngine(null);
       }
       
     } else {
+      // Eliminazione completa del motore
+      const engineName = engines.find(e => e.id === engineToDeleteId)?.name || 'Motore Sconosciuto';
       setEngines(prevEngines => prevEngines.filter(engine => engine.id !== engineToDeleteId));
       setSelectedEngine(null);
+
+      // Mostra il messaggio OK esplicito
+      setShowConfirmationMessage(`OK! Il motore '${engineName}' è stato eliminato definitivamente.`);
+      setTimeout(() => setShowConfirmationMessage(null), 5000);
     }
+
+    // Reset degli stati del modale
     setShowDeleteConfirm(false);
     setEngineToDeleteId(null);
+    setEngineToDeleteName(null);
     setIsDeletingVersion(false);
   };
   
   const handleCancelDelete = () => {
     setShowDeleteConfirm(false);
     setEngineToDeleteId(null);
+    setEngineToDeleteName(null);
     setIsDeletingVersion(false);
   };
 
@@ -678,6 +720,10 @@ const App = () => {
 
   // Determina se mostrare l'EngineDetails (modalità modifica o creazione) o la Timeline
   const showEngineDetails = isCreating || isEditing;
+  const deleteMessage = isDeletingVersion 
+    ? `Sei sicuro di voler eliminare l'ultima versione di '${engineToDeleteName}'? Questa azione ripristinerà il motore allo stato precedente (Rollback).`
+    : 'Sei sicuro di voler eliminare questo motore? Questa azione è irreversibile.';
+
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans p-6 flex flex-col lg:flex-row gap-6">
@@ -687,13 +733,23 @@ const App = () => {
         body { font-family: 'Inter', sans-serif; }
       `}</style>
 
+      {/* MODALE DI CONFERMA ELIMINAZIONE/ROLLBACK */}
       {showDeleteConfirm && (
         <DeleteConfirmModal 
           onConfirm={handleConfirmDelete} 
           onCancel={handleCancelDelete} 
-          message={isDeletingVersion ? 'Sei sicuro di voler eliminare l\'ultima versione? Questa azione ripristinerà il motore allo stato precedente.' : 'Sei sicuro di voler eliminare questo motore? Questa azione è irreversibile.'}
+          message={deleteMessage}
         />
       )}
+      
+      {/* MESSAGGIO DI CONFERMA OK */}
+      {showConfirmationMessage && (
+        <div className="fixed top-4 right-4 bg-green-500 text-white p-4 rounded-lg shadow-xl z-50 animate-bounce">
+            {showConfirmationMessage}
+        </div>
+      )}
+
+
       <div className="lg:w-1/4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
         <h2 className="text-2xl font-bold mb-4">Motori di Rischio</h2>
         <div className="flex flex-col space-y-2 mb-4">
@@ -871,20 +927,14 @@ const App = () => {
                            Modifica Motore
                        </button>
                    )}
-                   {engines.length > 0 && selectedEngine && selectedEngine.versions.length > 1 && (
-                       <button 
-                         onClick={handleDeleteVersionConfirm} 
-                         className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm"
-                       >
-                         Elimina Ultima Versione ({selectedEngine.name})
-                       </button>
-                   )}
+                   {/* Ho rimosso il pulsante "Elimina Ultima Versione" da qui perché è ora gestito elemento per elemento nella lista AllEnginesTimeline */}
                </div>
             </div>
             
             <AllEnginesTimeline 
                 engines={engines} 
                 onShowDetails={handleViewDetails} 
+                onDeleteVersion={handleDeleteVersionConfirm} // Passiamo la funzione aggiornata
             />
           </div>
         )}
