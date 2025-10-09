@@ -125,56 +125,94 @@ const DeleteConfirmModal = ({ onConfirm, onCancel, message }) => {
   );
 };
 
-const Timeline = ({ versions, onShowDetails, onDeleteVersion }) => {
-  return (
-    <div className="space-y-8 mt-8">
-      <div className="flex justify-between items-center">
-        <h3 className="text-2xl font-bold">Cronologia delle Versioni</h3>
-        {versions.length > 1 && (
-          <button 
-            onClick={onDeleteVersion} 
-            className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm"
-          >
-            Elimina Ultima Versione
-          </button>
-        )}
-      </div>
-      {versions.slice().reverse().map((version, index) => {
-        // Calcola l'indice della versione precedente nell'array originale, non quello invertito
-        const originalIndex = versions.length - 1 - index;
-        const previousVersion = originalIndex > 0 ? versions[originalIndex - 1] : null;
-        const changes = previousVersion ? getChangesSummary(version, previousVersion) : ['Versione iniziale del motore.'];
+// Nuovo componente per la timeline combinata
+const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
+    const [filterEngineId, setFilterEngineId] = useState('all');
 
-        return (
-          <div key={version.versionId} className="relative pl-6">
-            <div className="absolute left-0 top-1 w-2 h-2 bg-blue-500 rounded-full"></div>
-            <div className="absolute left-1.5 top-2 h-full w-0.5 bg-blue-200 dark:bg-blue-800 -z-10"></div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{new Date(version.timestamp).toLocaleString()}</p>
-            {version.validityDate && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-bold mt-1">Valido da: {version.validityDate}</p>
-            )}
-            <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg mt-2">
-              <h4 className="font-semibold text-lg">Versione {versions.length - index}</h4>
-              <ul className="list-disc list-inside text-sm mt-2 space-y-1">
-                {changes.map((change, i) => (
-                  <li key={i}>{change}</li>
-                ))}
-              </ul>
-              {previousVersion && (
-                <button
-                  onClick={() => onShowDetails(version.data, previousVersion.data)}
-                  className="mt-4 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 py-1 px-3 rounded-lg text-sm"
-                >
-                  Visualizza Dettaglio
-                </button>
-              )}
+    // 1. Raccogli tutte le versioni con i dati del motore
+    const allVersions = engines.flatMap(engine => 
+        engine.versions.map((version, index) => ({
+            ...version,
+            engineId: engine.id,
+            engineName: engine.name,
+            engineVersions: engine.versions, // Passa tutte le versioni del motore per calcolare la versione precedente
+            versionIndex: index,
+        }))
+    ).filter(v => filterEngineId === 'all' || v.engineId === filterEngineId)
+     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Ordina dalla più recente
+
+    const engineColors = ['bg-blue-500', 'bg-green-500', 'bg-red-500', 'bg-yellow-500', 'bg-purple-500', 'bg-indigo-500', 'bg-pink-500', 'bg-teal-500'];
+    const getEngineColor = (engineId) => {
+        const index = engines.findIndex(e => e.id === engineId);
+        return engineColors[index % engineColors.length];
+    };
+
+    return (
+        <div className="space-y-8 mt-8">
+            <div className="flex justify-between items-center">
+                <h3 className="text-2xl font-bold">Cronologia delle Versioni Combinata</h3>
             </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+            
+            <div className="flex gap-4 items-center mb-4">
+                <label className="text-sm font-semibold">Filtra per motore:</label>
+                <select onChange={(e) => setFilterEngineId(e.target.value)} 
+                        value={filterEngineId} 
+                        className="p-2 rounded-lg bg-gray-50 dark:bg-gray-700">
+                    <option value="all">Tutti i motori</option>
+                    {engines.map(engine => <option key={engine.id} value={engine.id}>{engine.name}</option>)}
+                </select>
+            </div>
+            
+            <div className="space-y-4">
+                {allVersions.length === 0 ? (
+                    <p className="text-center text-gray-500 dark:text-gray-400">Nessuna versione da visualizzare.</p>
+                ) : (
+                    allVersions.map((version, index) => {
+                        const previousVersion = version.versionIndex > 0 ? version.engineVersions[version.versionIndex - 1] : null;
+                        
+                        // Per il riepilogo, usiamo la versione corrente e la precedente (se esiste)
+                        const changes = previousVersion 
+                            ? getChangesSummary(version, previousVersion) 
+                            : ['Versione iniziale del motore.'];
+
+                        const engineColorClass = getEngineColor(version.engineId);
+                        
+                        return (
+                            <div 
+                                key={version.versionId} 
+                                className={`p-4 rounded-lg shadow-md cursor-pointer transition-transform hover:scale-[1.01] flex items-start space-x-4 ${engineColorClass} bg-opacity-10 dark:bg-opacity-20`}
+                                onClick={() => {
+                                    if(previousVersion) {
+                                        onShowDetails(version.data, previousVersion.data);
+                                    }
+                                }}
+                            >
+                                <div className={`w-3 h-3 rounded-full ${engineColorClass} flex-shrink-0 mt-1.5`}></div>
+                                <div className="flex-1">
+                                    <h4 className={`font-semibold text-lg ${engineColorClass.replace('bg-', 'text-')}`}>
+                                        {version.engineName} - Versione {version.versionIndex + 1}
+                                    </h4>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                        Data Creazione: {new Date(version.timestamp).toLocaleString()}
+                                        {version.validityDate && ` | Valido da: ${version.validityDate}`}
+                                    </p>
+                                    <ul className="list-disc list-inside text-sm mt-2 text-gray-800 dark:text-gray-200 space-y-1">
+                                        {/* Mostra solo il primo elemento per una sintesi concisa */}
+                                        <li className="font-medium truncate">{changes[0]}</li>
+                                        {changes.length > 1 && <li className="text-gray-500 dark:text-gray-400 text-xs">... (+{changes.length - 1} altre modifiche)</li>}
+                                    </ul>
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
+            </div>
+            {/* Pulsante per eliminare l'ultima versione è stato spostato per essere contestuale al motore selezionato, 
+                ma lo manteniamo qui se è necessario per la vista combinata (per ora lo tolgo, lo si fa dalla vista 'list' standard) */}
+        </div>
+    );
 };
+
 
 const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onBackToList }) => {
   // Stato locale per il filtro
@@ -246,7 +284,7 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onBackToList })
             onClick={onBackToList}
             className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm"
         >
-            Torna a Cronologia
+            Torna a Cronologia Combinata
         </button>
       </div>
 
@@ -309,6 +347,61 @@ const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onBackToList })
     </div>
   );
 };
+
+// Ho rimosso il vecchio componente Timeline e inglobato la sua logica in AllEnginesTimeline
+const Timeline = ({ versions, onShowDetails, onDeleteVersion }) => {
+  // Questo componente ora viene usato solo per la visualizzazione a lista di un SINGOLO motore, se necessario in futuro.
+  // Per ora, lo lasciamo come fallback concettuale ma non verrà chiamato dal nuovo flusso.
+  // La sua logica è stata assorbita e migliorata in AllEnginesTimeline.
+  return (
+    <div className="space-y-8 mt-8">
+      <div className="flex justify-between items-center">
+        <h3 className="text-2xl font-bold">Cronologia del Motore Corrente</h3>
+        {versions.length > 1 && (
+          <button 
+            onClick={onDeleteVersion} 
+            className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm"
+          >
+            Elimina Ultima Versione
+          </button>
+        )}
+      </div>
+      {versions.slice().reverse().map((version, index) => {
+        const originalIndex = versions.length - 1 - index;
+        const previousVersion = originalIndex > 0 ? versions[originalIndex - 1] : null;
+        const changes = previousVersion ? getChangesSummary(version, previousVersion) : ['Versione iniziale del motore.'];
+
+        return (
+          <div key={version.versionId} className="relative pl-6">
+            <div className="absolute left-0 top-1 w-2 h-2 bg-blue-500 rounded-full"></div>
+            <div className="absolute left-1.5 top-2 h-full w-0.5 bg-blue-200 dark:bg-blue-800 -z-10"></div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{new Date(version.timestamp).toLocaleString()}</p>
+            {version.validityDate && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-bold mt-1">Valido da: {version.validityDate}</p>
+            )}
+            <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg mt-2">
+              <h4 className="font-semibold text-lg">Versione {versions.length - index}</h4>
+              <ul className="list-disc list-inside text-sm mt-2 space-y-1">
+                {changes.map((change, i) => (
+                  <li key={i}>{change}</li>
+                ))}
+              </ul>
+              {previousVersion && (
+                <button
+                  onClick={() => onShowDetails(version.data, previousVersion.data)}
+                  className="mt-4 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 py-1 px-3 rounded-lg text-sm"
+                >
+                  Visualizza Dettaglio
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 
 const ChangeDetailsModal = ({ changes, onClose }) => {
   if (!changes) return null;
@@ -468,7 +561,7 @@ const App = () => {
   // Stati del modale e della vista
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [timelineView, setTimelineView] = useState('list'); // 'list' or 'gantt'
+  const [timelineView, setTimelineView] = useState('combined'); // MODIFICATO: 'combined' o 'gantt'
   const [changeDetails, setChangeDetails] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -506,9 +599,9 @@ const App = () => {
 
   const handleSelectEngine = (engine) => {
     setSelectedEngine(engine);
-    // NON toccare timelineView qui, a meno che non si stia creando un nuovo motore
+    // Quando seleziono un motore, mostro la vista combinata di default
     if (engine) {
-        setTimelineView('list');
+        setTimelineView('combined'); 
         setIsEditing(false);
         setIsCreating(false);
         loadEngineData(engine);
@@ -693,7 +786,7 @@ const App = () => {
   };
 
   const handleBackToList = () => {
-    setTimelineView('list');
+    setTimelineView('combined'); // MODIFICATO: Torna alla lista combinata
   };
 
   // Funzioni di supporto per dati basati su array (Statistico, Esterno, Logica, Impatto)
@@ -714,6 +807,9 @@ const App = () => {
       </div>
     );
   }
+
+  // Determina se mostrare l'EngineDetails (modalità modifica o creazione) o la Timeline/Gantt
+  const showEngineDetails = isCreating || isEditing;
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans p-6 flex flex-col lg:flex-row gap-6">
@@ -783,117 +879,98 @@ const App = () => {
       </div>
 
       <div className="flex-1 p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
-        {isCreating ? (
+        {showEngineDetails ? (
           <div>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Nuovo Motore</h2>
-              <button
-                onClick={() => {
-                  setIsCreating(false);
-                  resetFormState();
-                }}
-                className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-              >
-                Indietro
-              </button>
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-semibold mb-2">Nome Motore</label>
-              <input
-                type="text"
-                value={newEngineName}
-                onChange={(e) => setNewEngineName(e.target.value)}
-                className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600"
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-semibold mb-2">Descrizione</label>
-              <textarea
-                value={newEngineDesc}
-                onChange={(e) => setNewEngineDesc(e.target.value)}
-                className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24"
-              />
-            </div>
-            <button
-              onClick={handleCreateEngine}
-              className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors mr-2"
-            >
-              Salva Motore
-            </button>
-          </div>
-        ) : selectedEngine ? (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-3xl font-bold">{selectedEngine.name}</h2>
+              <h2 className="text-2xl font-bold">{isCreating ? 'Nuovo Motore' : selectedEngine.name}</h2>
               <div className="space-x-2">
-                <button
-                  onClick={() => {
-                    setIsEditing(prev => !prev);
-                    // Ricarica i dati dell'ultima versione se si esce dalla modalità di modifica
-                    if (isEditing) {
-                        loadEngineData(selectedEngine);
-                    }
-                  }}
-                  className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-                >
-                  {isEditing ? 'Visualizza' : 'Modifica'}
-                </button>
-                {!isEditing && (
-                    <button
-                        onClick={() => setTimelineView(prev => prev === 'list' ? 'gantt' : 'list')}
-                        className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-                    >
-                        {timelineView === 'list' ? 'Visualizza Calendario' : 'Mostra Lista'}
-                    </button>
-                )}
-                <button
-                  onClick={() => handleDeleteEngineConfirm(selectedEngine.id)}
-                  className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-                >
-                  Elimina
-                </button>
+                  {isEditing && (
+                      <button
+                           onClick={() => {
+                           setIsEditing(prev => !prev);
+                           // Ricarica i dati dell'ultima versione se si esce dalla modalità di modifica
+                           if (isEditing) {
+                               loadEngineData(selectedEngine);
+                           }
+                         }}
+                         className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                       >
+                           Visualizza
+                       </button>
+                  )}
+                   {isCreating && (
+                       <button
+                           onClick={() => {
+                           setIsCreating(false);
+                           resetFormState();
+                           }}
+                           className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                       >
+                           Indietro
+                       </button>
+                   )}
+                   {selectedEngine && !isCreating && (
+                       <button
+                         onClick={() => handleDeleteEngineConfirm(selectedEngine.id)}
+                         className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                       >
+                         Elimina
+                       </button>
+                   )}
               </div>
             </div>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">{selectedEngine.description}</p>
-            
-            {/* Sezione Modifica/Salvataggio */}
-            {isEditing && (
-              <div className="space-y-6 mb-6 p-4 border border-gray-300 dark:border-gray-600 rounded-lg">
-                <div className="mb-4">
-                  <label className="block text-sm font-semibold mb-2">Data di validità della modifica</label>
-                  <input
-                    type="date"
-                    value={changeValidityDate}
-                    onChange={(e) => setChangeValidityDate(e.target.value)}
-                    className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Lascia vuoto se non è richiesto un tracciamento specifico per data.</p>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => handleUpdateEngine(true)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Salva con tracciamento</button>
-                  <button onClick={() => handleUpdateEngine(false)} className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg">Salva senza tracciamento (Sovrascrive l'ultima versione)</button>
-                  <button onClick={() => {
-                    setIsEditing(false);
-                    loadEngineData(selectedEngine); // Annulla ripristinando l'ultima versione
-                  }} className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Annulla</button>
-                </div>
-              </div>
-            )}
 
-            {timelineView === 'list' && !isEditing ? (
-              <Timeline 
-                versions={selectedEngine.versions} 
-                onShowDetails={handleViewDetails} 
-                onDeleteVersion={handleDeleteVersionConfirm} 
-              />
-            ) : timelineView === 'gantt' && !isEditing ? (
-              <GanttTimeline 
-                engines={engines} 
-                selectedEngine={selectedEngine} 
-                onShowDetails={handleViewDetails} 
-                onBackToList={handleBackToList}
-              />
+            {isCreating ? (
+                <>
+                    <div className="mb-4">
+                        <label className="block text-sm font-semibold mb-2">Nome Motore</label>
+                        <input
+                            type="text"
+                            value={newEngineName}
+                            onChange={(e) => setNewEngineName(e.target.value)}
+                            className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600"
+                        />
+                    </div>
+                    <div className="mb-4">
+                        <label className="block text-sm font-semibold mb-2">Descrizione</label>
+                        <textarea
+                            value={newEngineDesc}
+                            onChange={(e) => setNewEngineDesc(e.target.value)}
+                            className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24"
+                        />
+                    </div>
+                    <button
+                        onClick={handleCreateEngine}
+                        className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors mr-2"
+                    >
+                        Salva Motore
+                    </button>
+                </>
             ) : (
+                <>
+                {/* Sezione Modifica/Salvataggio */}
+                {isEditing && (
+                  <div className="space-y-6 mb-6 p-4 border border-gray-300 dark:border-gray-600 rounded-lg">
+                    <div className="mb-4">
+                      <label className="block text-sm font-semibold mb-2">Data di validità della modifica</label>
+                      <input
+                        type="date"
+                        value={changeValidityDate}
+                        onChange={(e) => setChangeValidityDate(e.target.value)}
+                        className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Lascia vuoto se non è richiesto un tracciamento specifico per data.</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleUpdateEngine(true)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Salva con tracciamento</button>
+                      <button onClick={() => handleUpdateEngine(false)} className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg">Salva senza tracciamento (Sovrascrive l'ultima versione)</button>
+                      <button onClick={() => {
+                        setIsEditing(false);
+                        loadEngineData(selectedEngine); // Annulla ripristinando l'ultima versione
+                      }} className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Annulla</button>
+                    </div>
+                  </div>
+                )}
                 <EngineDetails
                   statisticalEngines={statisticalEngines}
                   setStatisticalEngines={setStatisticalEngines}
@@ -910,11 +987,53 @@ const App = () => {
                   updateEntry={updateEntry}
                   deleteEntry={deleteEntry}
                 />
+                </>
             )}
           </div>
         ) : (
-          <div className="text-center p-12 text-gray-500 dark:text-gray-400">
-            <h3 className="text-xl font-semibold mb-2">Seleziona un motore dalla lista o creane uno nuovo per iniziare.</h3>
+          <div>
+            <div className="flex justify-between items-center mb-4">
+               <h2 className="text-3xl font-bold">{selectedEngine ? `Cronologia: ${selectedEngine.name}` : 'Cronologia Motori'}</h2>
+               <div className="space-x-2">
+                   {selectedEngine && (
+                       <button
+                           onClick={() => setIsEditing(true)}
+                           className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                       >
+                           Modifica Motore
+                       </button>
+                   )}
+                   <button
+                       onClick={() => setTimelineView(prev => prev === 'combined' ? 'gantt' : 'combined')}
+                       className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                   >
+                       {timelineView === 'combined' ? 'Visualizza Calendario' : 'Mostra Lista Combinata'}
+                   </button>
+                   {selectedEngine && selectedEngine.versions.length > 1 && timelineView === 'combined' && (
+                       <button 
+                         onClick={handleDeleteVersionConfirm} 
+                         className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm"
+                       >
+                         Elimina Ultima Versione
+                       </button>
+                   )}
+               </div>
+            </div>
+            
+            {timelineView === 'combined' ? (
+                <AllEnginesTimeline 
+                    engines={engines} 
+                    onShowDetails={handleViewDetails} 
+                    onDeleteVersion={handleDeleteVersionConfirm} 
+                />
+            ) : (
+                <GanttTimeline 
+                    engines={engines} 
+                    selectedEngine={selectedEngine} 
+                    onShowDetails={handleViewDetails} 
+                    onBackToList={handleBackToList}
+                />
+            )}
           </div>
         )}
       </div>
