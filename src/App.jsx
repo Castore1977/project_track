@@ -517,9 +517,11 @@ const EngineDetails = ({ engines, currentEngineId, statisticalEngines, setStatis
         const file = event.target.files[0];
         if (file) {
             const fileName = file.name;
-            // Usiamo il nome del file come nome e un percorso simulato come URL
+            // Esempio di percorso locale simulato per chiarezza, anche se non apribile
+            const simulatedPath = `C:/Documenti/Risorse/${fileName}`; 
+            
             setter(index, 'name', fileName);
-            setter(index, 'url', `file:///${fileName}`); // Percorso simulato
+            setter(index, 'url', simulatedPath); 
         }
         // Resetta il valore dell'input per permettere la rislezione dello stesso file
         event.target.value = '';
@@ -699,7 +701,7 @@ const EngineDetails = ({ engines, currentEngineId, statisticalEngines, setStatis
                         target="_blank" 
                         rel="noopener noreferrer" 
                         onClick={(e) => {
-                            if (doc.url.startsWith('file://')) {
+                            if (!doc.url.startsWith('http') && !doc.url.startsWith('https')) { // Se non è un URL web, blocca
                                 e.preventDefault();
                                 console.warn(`Accesso bloccato: Non è possibile aprire file locali (${doc.url}) a causa delle restrizioni di sicurezza del browser.`);
                                 alert(`Attenzione! Non è possibile aprire file locali (${doc.url}) a causa delle restrizioni di sicurezza del browser. Cliccando "Apri" funziona solo per gli URL web.`);
