@@ -176,11 +176,14 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
                             : ['Versione iniziale del motore.'];
 
                         const engineColorClass = getEngineColor(version.engineId);
-                        
+                        const isLatestVersion = index === 0 && filterEngineId === 'all'; // Evidenzia la più recente se non filtrato
+
                         return (
                             <div 
                                 key={version.versionId} 
-                                className={`p-4 rounded-lg shadow-md cursor-pointer transition-transform hover:scale-[1.01] flex items-start space-x-4 ${engineColorClass} bg-opacity-10 dark:bg-opacity-20`}
+                                className={`p-4 rounded-lg shadow-md cursor-pointer transition-transform flex items-start space-x-4 
+                                            ${isLatestVersion ? 'ring-2 ring-purple-400 bg-purple-50 dark:bg-purple-900 hover:scale-[1.01]' : 'hover:scale-[1.01]'}
+                                            ${engineColorClass} bg-opacity-10 dark:bg-opacity-20`}
                                 onClick={() => {
                                     if(previousVersion) {
                                         onShowDetails(version.data, previousVersion.data);
@@ -195,6 +198,7 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
                                     <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                                         Data Creazione: {new Date(version.timestamp).toLocaleString()}
                                         {version.validityDate && ` | Valido da: ${version.validityDate}`}
+                                        {isLatestVersion && <span className="ml-2 font-bold text-purple-600 dark:text-purple-400">(ULTIMA TOTALE)</span>}
                                     </p>
                                     <ul className="list-disc list-inside text-sm mt-2 text-gray-800 dark:text-gray-200 space-y-1">
                                         {/* Mostra solo il primo elemento per una sintesi concisa */}
@@ -207,156 +211,19 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
                     })
                 )}
             </div>
-            {/* Pulsante per eliminare l'ultima versione è stato spostato per essere contestuale al motore selezionato, 
-                ma lo manteniamo qui se è necessario per la vista combinata (per ora lo tolgo, lo si fa dalla vista 'list' standard) */}
         </div>
     );
 };
 
 
-const GanttTimeline = ({ engines, selectedEngine, onShowDetails, onBackToList }) => {
-  // Stato locale per il filtro
-  const [filterEngineId, setFilterEngineId] = useState(selectedEngine ? selectedEngine.id : 'all');
+// Componente eliminato: GanttTimeline
 
-  const today = new Date();
-  const startDate = new Date(today);
-  startDate.setDate(today.getDate() - 60);
-
-  const dates = [];
-  const months = {};
-  for (let d = new Date(startDate); d <= today; d.setDate(d.getDate() + 1)) {
-    const date = new Date(d);
-    dates.push(date);
-    const monthYear = `${date.getFullYear()}-${date.getMonth()}`;
-    if (!months[monthYear]) {
-      months[monthYear] = { count: 0, year: date.getFullYear(), month: date.toLocaleString('default', { month: 'long' }) };
-    }
-    months[monthYear].count++;
-  }
-
-  const getVersionsByDate = (date) => {
-    const versions = [];
-    
-    // Logica di filtraggio CORRETTA:
-    let targetEngines = [];
-    if (filterEngineId === 'all') {
-      // Se è 'all', usa tutti i motori
-      targetEngines = engines;
-    } else {
-      // Altrimenti, usa solo il motore filtrato
-      const filteredEngine = engines.find(e => e.id === filterEngineId);
-      if (filteredEngine) {
-          targetEngines = [filteredEngine];
-      }
-    }
-
-    targetEngines.forEach(engine => {
-      engine.versions.forEach((version, index) => {
-        // Usa la data di validità se esiste, altrimenti usa la data di creazione
-        const timelineDate = version.validityDate ? new Date(version.validityDate) : new Date(version.timestamp);
-        
-        // Confronta solo la data (anno, mese, giorno)
-        if (timelineDate.toDateString() === date.toDateString()) {
-          const previousVersion = index > 0 ? engine.versions[index - 1] : null;
-          versions.push({
-            engineId: engine.id,
-            engineName: engine.name,
-            version,
-            previousVersion,
-          });
-        }
-      });
-    });
-    return versions;
-  };
-
-  const engineColors = ['bg-blue-500', 'bg-green-500', 'bg-red-500', 'bg-yellow-500', 'bg-purple-500', 'bg-indigo-500', 'bg-pink-500', 'bg-teal-500'];
-  const getEngineColor = (engineName) => {
-    const index = engines.findIndex(e => e.name === engineName);
-    return engineColors[index % engineColors.length];
-  };
-
-  return (
-    <div className="p-4"> 
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-2xl font-bold">Visualizzazione Calendario</h3>
-        <button
-            onClick={onBackToList}
-            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm"
-        >
-            Torna a Cronologia Combinata
-        </button>
-      </div>
-
-      <div className="flex gap-4 items-center mb-4">
-        <label className="text-sm font-semibold">Filtra per motore:</label>
-        <select onChange={(e) => setFilterEngineId(e.target.value)} 
-                value={filterEngineId} 
-                className="p-2 rounded-lg bg-gray-50 dark:bg-gray-700">
-          <option value="all">Tutti i motori</option>
-          {engines.map(engine => <option key={engine.id} value={engine.id}>{engine.name}</option>)}
-        </select>
-      </div>
-      
-      {/* Wrapper per lo scorrimento orizzontale */}
-      <div className="overflow-x-auto pb-4">
-        {/* Min-width calcolato per 61 giorni * 32px/giorno = 1952px */}
-        <div className="min-w-[1952px]"> 
-            
-            {/* Intestazioni Mesi */}
-            <div className="flex w-full"> 
-                {Object.values(months).map((month, index) => (
-                <div key={index} className="text-center font-bold text-lg text-gray-700 dark:text-gray-300 border-b border-gray-400" 
-                    style={{ flexBasis: `${month.count * 32}px`, minWidth: `${month.count * 32}px` }}>
-                    {month.month} {month.year}
-                </div>
-                ))}
-            </div>
-            
-            {/* Intestazioni Giorni */}
-            <div className="flex w-full">
-                {dates.map((date, index) => (
-                <div key={index} className="flex-1 text-center font-semibold text-sm text-gray-500 min-w-[32px]">{date.getDate()}</div>
-                ))}
-            </div>
-            
-            {/* Corpo della Timeline con Scroll Verticale per Giorno */}
-            <div className="flex w-full border-l border-t border-b rounded-lg bg-gray-50 dark:bg-gray-700">
-                {dates.map((date, index) => {
-                const mods = getVersionsByDate(date);
-                return (
-                    <div key={index} 
-                        className="flex-1 flex flex-col items-center justify-start p-1 border-r border-gray-200 dark:border-gray-600 min-w-[32px] min-h-[150px] gap-1 overflow-y-auto" 
-                    >
-                    {mods.map((mod, modIndex) => (
-                        <div 
-                        key={modIndex} 
-                        onClick={() => onShowDetails(mod.version.data, mod.previousVersion?.data)} 
-                        className={`w-full text-center text-xs mt-1 p-1 rounded-lg text-white cursor-pointer hover:opacity-80 transition-opacity ${getEngineColor(mod.engineName)}`}
-                        title={`${mod.engineName} - Valido da: ${mod.version.validityDate || new Date(mod.version.timestamp).toLocaleDateString()}`}
-                        >
-                        {mod.engineName.substring(0, 3)}
-                        </div>
-                    ))}
-                    </div>
-                );
-                })}
-            </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Ho rimosso il vecchio componente Timeline e inglobato la sua logica in AllEnginesTimeline
+// Componente mantenuto per consistenza, ma non più utilizzato nel flusso principale.
 const Timeline = ({ versions, onShowDetails, onDeleteVersion }) => {
-  // Questo componente ora viene usato solo per la visualizzazione a lista di un SINGOLO motore, se necessario in futuro.
-  // Per ora, lo lasciamo come fallback concettuale ma non verrà chiamato dal nuovo flusso.
-  // La sua logica è stata assorbita e migliorata in AllEnginesTimeline.
   return (
     <div className="space-y-8 mt-8">
       <div className="flex justify-between items-center">
-        <h3 className="text-2xl font-bold">Cronologia del Motore Corrente</h3>
+        <h3 className="text-2xl font-bold">Cronologia del Motore Corrente (Vista Deprecata)</h3>
         {versions.length > 1 && (
           <button 
             onClick={onDeleteVersion} 
@@ -561,7 +428,7 @@ const App = () => {
   // Stati del modale e della vista
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [timelineView, setTimelineView] = useState('combined'); // MODIFICATO: 'combined' o 'gantt'
+  const [timelineView, setTimelineView] = useState('combined'); // Fissato a 'combined'
   const [changeDetails, setChangeDetails] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -785,8 +652,9 @@ const App = () => {
     setChangeDetails(null);
   };
 
+  // Funzione non più necessaria, ma mantenuta per pulizia
   const handleBackToList = () => {
-    setTimelineView('combined'); // MODIFICATO: Torna alla lista combinata
+    setTimelineView('combined'); 
   };
 
   // Funzioni di supporto per dati basati su array (Statistico, Esterno, Logica, Impatto)
@@ -808,7 +676,7 @@ const App = () => {
     );
   }
 
-  // Determina se mostrare l'EngineDetails (modalità modifica o creazione) o la Timeline/Gantt
+  // Determina se mostrare l'EngineDetails (modalità modifica o creazione) o la Timeline
   const showEngineDetails = isCreating || isEditing;
 
   return (
@@ -895,7 +763,7 @@ const App = () => {
                          }}
                          className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
                        >
-                           Visualizza
+                           Visualizza Cronologia
                        </button>
                   )}
                    {isCreating && (
@@ -914,7 +782,7 @@ const App = () => {
                          onClick={() => handleDeleteEngineConfirm(selectedEngine.id)}
                          className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
                        >
-                         Elimina
+                         Elimina Motore
                        </button>
                    )}
               </div>
@@ -993,7 +861,7 @@ const App = () => {
         ) : (
           <div>
             <div className="flex justify-between items-center mb-4">
-               <h2 className="text-3xl font-bold">{selectedEngine ? `Cronologia: ${selectedEngine.name}` : 'Cronologia Motori'}</h2>
+               <h2 className="text-3xl font-bold">Cronologia Motori</h2>
                <div className="space-x-2">
                    {selectedEngine && (
                        <button
@@ -1003,37 +871,21 @@ const App = () => {
                            Modifica Motore
                        </button>
                    )}
-                   <button
-                       onClick={() => setTimelineView(prev => prev === 'combined' ? 'gantt' : 'combined')}
-                       className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-                   >
-                       {timelineView === 'combined' ? 'Visualizza Calendario' : 'Mostra Lista Combinata'}
-                   </button>
-                   {selectedEngine && selectedEngine.versions.length > 1 && timelineView === 'combined' && (
+                   {engines.length > 0 && selectedEngine && selectedEngine.versions.length > 1 && (
                        <button 
                          onClick={handleDeleteVersionConfirm} 
                          className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm"
                        >
-                         Elimina Ultima Versione
+                         Elimina Ultima Versione ({selectedEngine.name})
                        </button>
                    )}
                </div>
             </div>
             
-            {timelineView === 'combined' ? (
-                <AllEnginesTimeline 
-                    engines={engines} 
-                    onShowDetails={handleViewDetails} 
-                    onDeleteVersion={handleDeleteVersionConfirm} 
-                />
-            ) : (
-                <GanttTimeline 
-                    engines={engines} 
-                    selectedEngine={selectedEngine} 
-                    onShowDetails={handleViewDetails} 
-                    onBackToList={handleBackToList}
-                />
-            )}
+            <AllEnginesTimeline 
+                engines={engines} 
+                onShowDetails={handleViewDetails} 
+            />
           </div>
         )}
       </div>
