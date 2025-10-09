@@ -353,21 +353,26 @@ const ChangeDetailsModal = ({ changes, onClose }) => {
 const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngines, setExternalEngines, universe, setUniverse, logicDetails, setLogicDetails, kpis, setKpis, isEditing, addEntry, updateEntry, deleteEntry }) => {
   return (
     <div className="space-y-8 mt-8">
-      {/* Sezione Universo di Applicazione */}
-      <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-        <h3 className="text-xl font-bold mb-4">Universo di Applicazione</h3>
-        <textarea value={universe.description || ''} onChange={(e) => setUniverse({ description: e.target.value })} disabled={!isEditing} className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600 h-24"></textarea>
+      {/* Sezione Universo di Applicazione - RESALTATA */}
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-blue-500">
+        <h3 className="text-2xl font-bold text-blue-500 mb-4">1. Universo di Applicazione</h3>
+        <textarea 
+          value={universe.description || ''} 
+          onChange={(e) => setUniverse({ description: e.target.value })} 
+          disabled={!isEditing} 
+          className="w-full p-2 border rounded-lg bg-gray-50 dark:bg-gray-900 dark:border-gray-600 h-24 text-gray-900 dark:text-gray-100"
+        ></textarea>
       </div>
 
-      {/* Sezione Motore Statistico */}
-      <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+      {/* Sezione Motore Statistico - RESALTATA */}
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-green-500">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-bold">Motore Statistico</h3>
-          {isEditing && <button onClick={() => addEntry(setStatisticalEngines, { name: '', description: '' })} className="bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-gray-100 py-1 px-3 rounded-lg text-sm">+</button>}
+          <h3 className="text-2xl font-bold text-green-500">2. Motore Statistico</h3>
+          {isEditing && <button onClick={() => addEntry(setStatisticalEngines, { name: '', description: '' })} className="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors">+</button>}
         </div>
         <div className="space-y-4">
           {statisticalEngines.map((engine, index) => (
-            <div key={index} className="p-3 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-600">
+            <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
               <label className="block text-sm font-semibold mb-1">Nome</label>
               <input type="text" value={engine.name} onChange={(e) => updateEntry(setStatisticalEngines, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600" />
               <label className="block text-sm font-semibold mt-2 mb-1">Dettagli</label>
@@ -378,15 +383,15 @@ const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngi
         </div>
       </div>
 
-      {/* Sezione Altri Motori Esterni */}
-      <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+      {/* Sezione Altri Motori Esterni - RESALTATA */}
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-yellow-500">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-bold">Altri Motori Esterni</h3>
-          {isEditing && <button onClick={() => addEntry(setExternalEngines, { name: '', description: '' })} className="bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-gray-100 py-1 px-3 rounded-lg text-sm">+</button>}
+          <h3 className="text-2xl font-bold text-yellow-500">3. Altri Motori Esterni</h3>
+          {isEditing && <button onClick={() => addEntry(setExternalEngines, { name: '', description: '' })} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors">+</button>}
         </div>
         <div className="space-y-4">
           {externalEngines.map((engine, index) => (
-            <div key={index} className="p-3 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-600">
+            <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
               <label className="block text-sm font-semibold mb-1">Nome</label>
               <input type="text" value={engine.name} onChange={(e) => updateEntry(setExternalEngines, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600" />
               <label className="block text-sm font-semibold mt-2 mb-1">Dettagli</label>
@@ -397,15 +402,15 @@ const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngi
         </div>
       </div>
 
-      {/* Sezione Logiche del Motore */}
-      <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+      {/* Sezione Logiche del Motore - RESALTATA */}
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-red-500">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-bold">Logiche del Motore</h3>
-          {isEditing && <button onClick={() => addEntry(setLogicDetails, { name: '', description: '' })} className="bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-gray-100 py-1 px-3 rounded-lg text-sm">+</button>}
+          <h3 className="text-2xl font-bold text-red-500">4. Logiche del Motore</h3>
+          {isEditing && <button onClick={() => addEntry(setLogicDetails, { name: '', description: '' })} className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors">+</button>}
         </div>
         <div className="space-y-4">
           {logicDetails.map((logic, index) => (
-            <div key={index} className="p-3 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-600">
+            <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
               <label className="block text-sm font-semibold mb-1">Nome Logica</label>
               <input type="text" value={logic.name} onChange={(e) => updateEntry(setLogicDetails, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600" />
               <label className="block text-sm font-semibold mt-2 mb-1">Dettaglio</label>
@@ -416,15 +421,15 @@ const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngi
         </div>
       </div>
 
-      {/* Sezione Impatto */}
-      <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+      {/* Sezione Impatto - RESALTATA */}
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-purple-500">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-bold">Impatto</h3>
-          {isEditing && <button onClick={() => addEntry(setKpis, { name: '', calculation: '', impact: '' })} className="bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-gray-100 py-1 px-3 rounded-lg text-sm">+</button>}
+          <h3 className="text-2xl font-bold text-purple-500">5. Impatto (KPI)</h3>
+          {isEditing && <button onClick={() => addEntry(setKpis, { name: '', calculation: '', impact: '' })} className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors">+</button>}
         </div>
         <div className="space-y-4">
           {kpis.map((kpi, index) => (
-            <div key={index} className="p-3 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-600">
+            <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
               <label className="block text-sm font-semibold mb-1">Nome KPI</label>
               <input type="text" value={kpi.name} onChange={(e) => updateEntry(setKpis, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600" />
               <label className="block text-sm font-semibold mt-2 mb-1">Dettaglio Calcolo</label>
