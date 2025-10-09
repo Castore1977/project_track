@@ -58,8 +58,11 @@ const getChangesSummary = (currentVersion, previousVersion) => {
 
   // 5. Impatti (KPI)
   summarizeChanges(current.kpis, previous.kpis, 'KPI');
+  
+  // 6. Documentazione
+  summarizeChanges(current.documentation, previous.documentation, 'Documentazione');
 
-  // 6. Data di validità (prioritaria)
+  // 7. Data di validità (prioritaria)
   if (currentVersion.validityDate !== previousVersion.validityDate) {
     allChanges.unshift(`Data di validità: ${previousVersion.validityDate || 'non definita'} -> ${currentVersion.validityDate || 'non definita'}`);
   }
@@ -117,6 +120,7 @@ const getDetailedChanges = (current, previous) => {
   compareArrays(current.externalEngines, previous.externalEngines, 'Motore Esterno', 'name');
   compareArrays(current.logicDetails, previous.logicDetails, 'Logica del Motore', 'name');
   compareArrays(current.kpis, previous.kpis, 'Impatto', 'name');
+  compareArrays(current.documentation, previous.documentation, 'Documentazione', 'name');
 
   return details;
 };
@@ -330,10 +334,11 @@ const ChangeDetailsModal = ({ changes, onClose }) => {
                 {change.type === 'modificato' && (
                   <div className="mt-2 space-y-2 text-sm">
                     {Object.entries(change.changes).map(([field, diff]) => (
-                      <div key={field} className="grid grid-cols-1 md:grid-cols-3 gap-2 p-1 border-b border-gray-300 dark:border-gray-600">
-                        <p className="font-medium col-span-1 truncate">{field}:</p>
-                        <p className="text-red-400 line-through col-span-1 truncate">Prima: {diff.before}</p>
-                        <p className="text-green-400 col-span-1 truncate">Dopo: {diff.after}</p>
+                      // Rimosso 'truncate' e aumentato lo spazio per la lettura completa
+                      <div key={field} className="grid grid-cols-1 md:grid-cols-3 gap-2 p-1 border-b border-gray-300 dark:border-gray-600 break-words">
+                        <p className="font-medium col-span-1">{field}:</p>
+                        <p className="text-red-400 line-through col-span-1">Prima: {diff.before}</p>
+                        <p className="text-green-400 col-span-1">Dopo: {diff.after}</p>
                       </div>
                     ))}
                   </div>
@@ -350,7 +355,7 @@ const ChangeDetailsModal = ({ changes, onClose }) => {
   );
 };
 
-const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngines, setExternalEngines, universe, setUniverse, logicDetails, setLogicDetails, kpis, setKpis, isEditing, addEntry, updateEntry, deleteEntry }) => {
+const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngines, setExternalEngines, universe, setUniverse, logicDetails, setLogicDetails, kpis, setKpis, documentation, setDocumentation, isEditing, addEntry, updateEntry, deleteEntry }) => {
   return (
     <div className="space-y-8 mt-8">
       {/* Sezione Universo di Applicazione - RESALTATA */}
@@ -441,6 +446,29 @@ const EngineDetails = ({ statisticalEngines, setStatisticalEngines, externalEngi
           ))}
         </div>
       </div>
+      
+      {/* Sezione Documentazione - NUOVA SEZIONE RESALTATA */}
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border-t-4 border-indigo-500">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-2xl font-bold text-indigo-500">6. Documentazione</h3>
+          {isEditing && <button onClick={() => addEntry(setDocumentation, { name: '', url: '' })} className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors">+</button>}
+        </div>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Aggiungi link a documenti, report o specifiche (anche a file locali usando il percorso completo, sebbene l'accesso diretto sia bloccato dai browser).</p>
+        <div className="space-y-4">
+          {documentation.map((doc, index) => (
+            <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
+              <label className="block text-sm font-semibold mb-1">Nome Documento</label>
+              <input type="text" value={doc.name} onChange={(e) => updateEntry(setDocumentation, index, 'name', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600" />
+              <label className="block text-sm font-semibold mt-2 mb-1">Link / Percorso Locale</label>
+              <div className="flex items-center gap-2">
+                  <input type="text" value={doc.url} onChange={(e) => updateEntry(setDocumentation, index, 'url', e.target.value)} disabled={!isEditing} className="w-full p-1 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600" />
+                  <a href={doc.url} target="_blank" rel="noopener noreferrer" className="bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-gray-100 py-1 px-3 rounded-lg text-sm flex-shrink-0" title="Apri Link">Apri</a>
+              </div>
+              {isEditing && <button onClick={() => deleteEntry(setDocumentation, index)} className="mt-2 text-red-500 text-sm">Rimuovi</button>}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };
@@ -460,6 +488,7 @@ const App = () => {
   const [universe, setUniverse] = useState({});
   const [logicDetails, setLogicDetails] = useState([]);
   const [kpis, setKpis] = useState([]);
+  const [documentation, setDocumentation] = useState([]); // NUOVO STATO
   const [changeValidityDate, setChangeValidityDate] = useState('');
 
   // Stati del modale e della vista
@@ -471,8 +500,9 @@ const App = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingVersion, setIsDeletingVersion] = useState(false);
   const [engineToDeleteId, setEngineToDeleteId] = useState(null);
-  const [engineToDeleteName, setEngineToDeleteName] = useState(null); // Nuovo stato per il nome del motore
-  const [showConfirmationMessage, setShowConfirmationMessage] = useState(null); // Nuovo stato per il messaggio OK
+  const [engineToDeleteName, setEngineToDeleteName] = useState(null); 
+  const [showConfirmationMessage, setShowConfirmationMessage] = useState(null); 
+  const [showErrorMessage, setShowErrorMessage] = useState(null); // NUOVO STATO
 
   const resetFormState = () => {
     setNewEngineName('');
@@ -482,7 +512,18 @@ const App = () => {
     setUniverse({});
     setLogicDetails([]);
     setKpis([]);
+    setDocumentation([]); // Reset del nuovo stato
     setChangeValidityDate('');
+  };
+  
+  const showTemporaryMessage = (message, type = 'success') => {
+      if (type === 'success') {
+          setShowConfirmationMessage(message);
+          setTimeout(() => setShowConfirmationMessage(null), 5000);
+      } else if (type === 'error') {
+          setShowErrorMessage(message);
+          setTimeout(() => setShowErrorMessage(null), 8000);
+      }
   };
 
   const loadEngineData = (engine) => {
@@ -493,6 +534,7 @@ const App = () => {
       setUniverse(latestVersion.data.universe || {});
       setLogicDetails(latestVersion.data.logicDetails || []);
       setKpis(latestVersion.data.kpis || []);
+      setDocumentation(latestVersion.data.documentation || []); // Carica il nuovo stato
     } else {
         // Se non ci sono versioni, resetta i dati a vuoto
         setStatisticalEngines([]);
@@ -500,6 +542,7 @@ const App = () => {
         setUniverse({});
         setLogicDetails([]);
         setKpis([]);
+        setDocumentation([]); // Reset del nuovo stato
     }
   };
 
@@ -515,7 +558,10 @@ const App = () => {
   };
 
   const handleCreateEngine = () => {
-    if (!newEngineName) return;
+    if (!newEngineName) {
+        showTemporaryMessage("Il nome del motore non può essere vuoto.", 'error');
+        return;
+    }
     
     const newEngine = {
       id: crypto.randomUUID(),
@@ -530,6 +576,7 @@ const App = () => {
           logicDetails: logicDetails,
           universe: universe,
           kpis: kpis,
+          documentation: documentation, // Inclusione del nuovo stato
         },
       }],
     };
@@ -539,12 +586,31 @@ const App = () => {
     setIsCreating(false);
     setSelectedEngine(newEngine); // Seleziona il motore appena creato
     
-    // Esporta JSON dopo la creazione
+    showTemporaryMessage(`Motore '${newEngine.name}' creato con successo!`);
     handleExport(); 
   };
 
   const handleUpdateEngine = (trackChanges) => {
     if (!selectedEngine) return;
+
+    const currentEngine = engines.find(e => e.id === selectedEngine.id);
+    const lastVersionTimestamp = currentEngine.versions[currentEngine.versions.length - 1].timestamp;
+    const lastVersionDate = new Date(lastVersionTimestamp).toISOString().split('T')[0]; // Ottieni solo la data YYYY-MM-DD
+
+    // 1. Validazione della Data di validità (solo se trackChanges è true)
+    if (trackChanges && changeValidityDate) {
+        const validityDate = new Date(changeValidityDate);
+        const lastModDate = new Date(lastVersionTimestamp);
+        
+        // Confronto solo per la data, ignorando l'ora del salvataggio attuale
+        const validityDay = new Date(validityDate.toDateString());
+        const lastModDay = new Date(lastModDate.toDateString());
+
+        if (validityDay <= lastModDay) {
+            showTemporaryMessage(`La data di validità (${changeValidityDate}) deve essere SUCCESSIVA all'ultima data di modifica/validità registrata (${lastVersionDate}).`, 'error');
+            return;
+        }
+    }
     
     const newEngineData = {
         statisticalEngines,
@@ -552,6 +618,7 @@ const App = () => {
         logicDetails,
         universe,
         kpis,
+        documentation, // Inclusione del nuovo stato
     };
 
     setEngines(prevEngines => prevEngines.map(engine => {
@@ -587,7 +654,7 @@ const App = () => {
     // Aggiorna lo stato dei dati mostrati
     loadEngineData({ ...selectedEngine, versions: trackChanges ? [...selectedEngine.versions, { data: newEngineData, validityDate: changeValidityDate }] : selectedEngine.versions });
 
-    // *** MODIFICA EFFETTUATA QUI: Chiama l'esportazione dopo il salvataggio ***
+    showTemporaryMessage("Modifiche salvate con successo. Backup JSON generato.");
     handleExport();
   };
 
@@ -626,9 +693,7 @@ const App = () => {
       }).filter(engine => engine.versions.length > 0)); // Rimuove motori senza versioni
 
       if (deletedEngineName) {
-        // Mostra il messaggio OK esplicito
-        setShowConfirmationMessage(`OK! L'ultima versione di '${deletedEngineName}' è stata eliminata. Il motore è stato riportato allo stato precedente.`);
-        setTimeout(() => setShowConfirmationMessage(null), 5000); // Nascondi dopo 5 secondi
+        showTemporaryMessage(`OK! L'ultima versione di '${deletedEngineName}' è stata eliminata. Il motore è stato riportato allo stato precedente (Rollback).`);
       }
       
       // Se stiamo eliminando l'ultima versione di un motore e non rimangono versioni, deselezionalo
@@ -643,9 +708,7 @@ const App = () => {
       setEngines(prevEngines => prevEngines.filter(engine => engine.id !== engineToDeleteId));
       setSelectedEngine(null);
 
-      // Mostra il messaggio OK esplicito
-      setShowConfirmationMessage(`OK! Il motore '${engineName}' è stato eliminato definitivamente.`);
-      setTimeout(() => setShowConfirmationMessage(null), 5000);
+      showTemporaryMessage(`OK! Il motore '${engineName}' è stato eliminato definitivamente.`);
     }
 
     // Reset degli stati del modale
@@ -681,9 +744,6 @@ const App = () => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    
-    // Aggiungi un feedback visivo se necessario, ma non interrompere il flusso
-    console.log(`Esportato il backup: ${filename}`);
   };
 
   const handleImport = (event) => {
@@ -702,8 +762,9 @@ const App = () => {
         // Deseleziona l'engine corrente dopo l'import
         setSelectedEngine(null); 
         resetFormState();
-        console.log("Import successful!");
+        showTemporaryMessage("Importazione JSON completata con successo!");
       } catch (error) {
+        showTemporaryMessage("Errore durante l'importazione del file JSON.", 'error');
         console.error("Error importing file: ", error);
       }
     };
@@ -781,6 +842,13 @@ const App = () => {
       {showConfirmationMessage && (
         <div className="fixed top-4 right-4 bg-green-500 text-white p-4 rounded-lg shadow-xl z-50 animate-bounce">
             {showConfirmationMessage}
+        </div>
+      )}
+      
+      {/* MESSAGGIO DI ERRORE */}
+      {showErrorMessage && (
+        <div className="fixed top-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-xl z-50 animate-bounce">
+            {showErrorMessage}
         </div>
       )}
 
@@ -918,7 +986,9 @@ const App = () => {
                         onChange={(e) => setChangeValidityDate(e.target.value)}
                         className="w-full p-2 border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-600"
                       />
-                      <p className="text-xs text-gray-500 mt-1">Lascia vuoto se non è richiesto un tracciamento specifico per data.</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                          Inserisci la data di validità per il tracciamento. Deve essere successiva all'ultima data di modifica.
+                      </p>
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => handleUpdateEngine(true)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Salva con tracciamento</button>
@@ -941,6 +1011,8 @@ const App = () => {
                   setLogicDetails={setLogicDetails}
                   kpis={kpis}
                   setKpis={setKpis}
+                  documentation={documentation} // Passa il nuovo stato
+                  setDocumentation={setDocumentation} // Passa il setter
                   isEditing={isEditing}
                   addEntry={addEntry}
                   updateEntry={updateEntry}
