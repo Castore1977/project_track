@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 
 // === FUNZIONI DI SUPPORTO PER IL CONFRONTO E IL RIEPILOGO ===
 
@@ -12,7 +12,6 @@ import React, { useState } from 'react';
  */
 const compareArrayChanges = (currentArray, previousArray, sectionName, uniqueKey = 'name') => {
   const changes = [];
-  // I `new new Map` originali sembrano un errore di battitura, li ho corretti a `new Map`
   const previousMap = new Map(previousArray.map(item => [item[uniqueKey], item]));
   const currentMap = new Map(currentArray.map(item => [item[uniqueKey], item]));
 
@@ -241,7 +240,162 @@ const DeleteConfirmModal = ({ onConfirm, onCancel, message }) => {
   );
 };
 
-const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
+// NUOVO COMPONENTE PER LA VISTA GRAFICA (TIMELINE GANTT)
+const GanttTimeline = ({ engines }) => {
+    // 1. Prepara i dati della timeline
+    const timelineData = useMemo(() => {
+        let allVersions = [];
+        engines.forEach(engine => {
+            engine.versions.forEach((version, index) => {
+                const startString = version.validityDate || version.timestamp.split('T')[0];
+                let endString = null;
+                
+                // Determina la data di fine: è la data di validità della versione successiva
+                if (index < engine.versions.length - 1) {
+                    endString = engine.versions[index + 1].validityDate || engine.versions[index + 1].timestamp.split('T')[0];
+                }
+
+                // Determina lo stato: Attuale se è l'ultima versione e non ha una data di fine definita
+                const isCurrent = index === engine.versions.length - 1 && !endString;
+
+                allVersions.push({
+                    engineId: engine.id,
+                    engineName: engine.name,
+                    versionIndex: index + 1,
+                    start: new Date(startString),
+                    end: endString ? new Date(endString) : (isCurrent ? new Date() : null), // Se attuale, termina oggi
+                    isCurrent,
+                    validityDate: version.validityDate,
+                    timestamp: version.timestamp,
+                });
+            });
+        });
+
+        // 2. Calcola l'intervallo temporale
+        const dates = allVersions.flatMap(v => [v.start, v.end]).filter(Boolean);
+        if (dates.length === 0) return { versions: [], minDate: new Date(), maxDate: new Date() };
+
+        const minDate = new Date(Math.min(...dates));
+        const maxDate = new Date(Math.max(...dates));
+        
+        // Aggiunge un po' di padding alla fine per la versione corrente
+        maxDate.setDate(maxDate.getDate() + 30); 
+
+        return { versions: allVersions, minDate, maxDate };
+    }, [engines]);
+
+    const { versions, minDate, maxDate } = timelineData;
+    
+    // Raggruppa i motori per il layout verticale
+    const uniqueEngineIds = useMemo(() => [...new Set(versions.map(v => v.engineId))], [versions]);
+    
+    // Giorni totali nell'intervallo (per la larghezza del grafico)
+    const totalDurationMs = maxDate.getTime() - minDate.getTime();
+    const daysPerPixel = 12; // 12 pixel per giorno per un buon livello di zoom
+    const chartWidth = totalDurationMs / (1000 * 60 * 60 * 24) * daysPerPixel; 
+
+    const engineColors = ['bg-blue-500', 'bg-green-500', 'bg-red-500', 'bg-yellow-500', 'bg-purple-500', 'bg-indigo-500', 'bg-pink-500', 'bg-teal-500'];
+    const getEngineColor = (engineId) => {
+        const index = engines.findIndex(e => e.id === engineId);
+        return engineColors[index % engineColors.length];
+    };
+
+    // Genera etichette temporali (ogni 30 giorni)
+    const timeMarkers = useMemo(() => {
+        const markers = [];
+        let currentDate = new Date(minDate);
+        while (currentDate <= maxDate) {
+            markers.push(new Date(currentDate));
+            currentDate.setDate(currentDate.getDate() + 30); // Passo di 30 giorni
+        }
+        return markers;
+    }, [minDate, maxDate]);
+
+    // Funzione helper per calcolare posizione e larghezza
+    const calculatePositionAndWidth = (start, end) => {
+        const startMs = start.getTime();
+        const endMs = end ? end.getTime() : new Date().getTime(); // Se end è nullo (versione corrente)
+        
+        const offsetMs = startMs - minDate.getTime();
+        const durationMs = endMs - startMs;
+        
+        const offsetDays = offsetMs / (1000 * 60 * 60 * 24);
+        const durationDays = durationMs / (1000 * 60 * 60 * 24);
+        
+        const left = offsetDays * daysPerPixel;
+        const width = durationDays * daysPerPixel;
+        
+        return { left, width };
+    };
+
+    return (
+        <div className="space-y-4 mt-8">
+            <h3 className="text-2xl font-bold mb-4">Timeline Grafica (Gantt)</h3>
+            
+            {versions.length === 0 ? (
+                <p className="text-center text-gray-500 dark:text-gray-400 p-8 border-2 border-dashed rounded-lg">Nessun dato di versione con date per la visualizzazione Gantt.</p>
+            ) : (
+                <div className="overflow-x-auto overflow-y-auto max-h-[60vh] bg-white dark:bg-gray-700 p-4 rounded-lg shadow-xl border">
+                    <div className="flex flex-col relative" style={{ width: `${chartWidth + 300}px` }}> 
+                        
+                        {/* Riga delle Etichette Temporali */}
+                        <div className="h-10 relative border-b border-gray-400 dark:border-gray-600">
+                            {timeMarkers.map((date, i) => (
+                                <div 
+                                    key={i} 
+                                    className="absolute top-0 h-full border-l border-gray-300 dark:border-gray-500 text-xs text-gray-500 dark:text-gray-400 -ml-px flex items-end pb-1 whitespace-nowrap"
+                                    style={{ left: calculatePositionAndWidth(date, date).left + 'px' }}
+                                >
+                                    {date.toLocaleDateString('it-IT', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Contenitore delle Barre della Timeline */}
+                        <div className="relative pt-4 space-y-6 min-h-[300px]">
+                            {uniqueEngineIds.map((engineId, rowIndex) => {
+                                const engineName = engines.find(e => e.id === engineId)?.name;
+                                const engineVersions = versions.filter(v => v.engineId === engineId);
+                                
+                                return (
+                                    <div key={engineId} className="relative h-8 flex items-center border-b border-gray-100 dark:border-gray-600">
+                                        {/* Etichetta Motore (Fissa a sinistra, coperta dallo scroll) */}
+                                        <div className="absolute left-0 w-64 bg-gray-50 dark:bg-gray-800 p-1 rounded-r-lg text-sm font-semibold truncate z-10 -ml-4 shadow-md">
+                                            {engineName}
+                                        </div>
+
+                                        {/* Barre di Versione */}
+                                        <div className="relative flex-1" style={{ marginLeft: '120px' }}>
+                                            {engineVersions.map((v, vIndex) => {
+                                                const { left, width } = calculatePositionAndWidth(v.start, v.end);
+                                                const colorClass = getEngineColor(v.engineId);
+                                                const hoverText = `V${v.versionIndex} | Valido dal: ${v.validityDate || new Date(v.timestamp).toLocaleDateString()} ${v.isCurrent ? '(Attuale)' : v.end ? `fino al ${v.end.toLocaleDateString()}` : ''}`;
+                                                
+                                                return (
+                                                    <div
+                                                        key={v.versionIndex}
+                                                        className={`absolute h-6 rounded-lg text-white text-xs font-medium cursor-pointer transition-transform duration-200 hover:scale-y-110 flex items-center justify-center whitespace-nowrap overflow-hidden ${colorClass} shadow-md`}
+                                                        style={{ left: `${left}px`, width: `${width > 5 ? width : 5}px`, opacity: 0.8 }}
+                                                        title={hoverText}
+                                                    >
+                                                        {width > 60 && `V${v.versionIndex} (${v.validityDate || 'Iniziale'})`}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+
+const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion, setTimelineView }) => {
     const [filterEngineId, setFilterEngineId] = useState('all');
 
     // 1. Raccogli tutte le versioni con i dati del motore
@@ -268,8 +422,14 @@ const AllEnginesTimeline = ({ engines, onShowDetails, onDeleteVersion }) => {
 
     return (
         <div className="space-y-8 mt-8">
-            <div className="flex justify-between items-center">
-                <h3 className="text-2xl font-bold">Cronologia delle Versioni Combinata</h3>
+            <div className="flex justify-between items-center border-b pb-3 dark:border-gray-700">
+                <h3 className="text-2xl font-bold">Cronologia in Lista (Combinata)</h3>
+                <button
+                    onClick={() => setTimelineView('gantt')}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-3 rounded-lg text-sm transition-colors shadow-md"
+                >
+                    Visualizza Timeline Grafica
+                </button>
             </div>
             
             <div className="flex flex-wrap gap-4 items-center mb-4 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg shadow-inner">
@@ -733,6 +893,7 @@ const App = () => {
   const [fileInput, setFileInput] = useState(null);
   // Nuovo stato per la gestione del drag and drop
   const [isDragging, setIsDragging] = useState(false); 
+  const [timelineView, setTimelineView] = useState('list'); // Nuovo stato per la vista cronologia ('list' o 'gantt')
 
   // Stati del form
   const [newEngineName, setNewEngineName] = useState('');
@@ -810,6 +971,7 @@ const App = () => {
         setIsCreating(false);
         loadEngineData(engine);
         setIsEditing(startEditing); // Imposta la modalità di modifica se richiesto
+        setTimelineView('list'); // Torna alla lista quando selezioni un motore
     }
   };
   
@@ -1155,6 +1317,7 @@ const App = () => {
     setIsCreating(false);
     setIsEditing(false);
     resetFormState(); // Puliamo i dati del form di modifica/creazione
+    setTimelineView('list'); // Di default, torna alla vista lista
   };
 
 
@@ -1424,16 +1587,29 @@ const App = () => {
                             Modifica Engine
                         </button>
                     )}
+                    {timelineView === 'gantt' && (
+                        <button
+                            onClick={() => setTimelineView('list')}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-lg"
+                        >
+                            Visualizza Cronologia in Lista
+                        </button>
+                    )}
                </div>
             </div>
             {engines.length === 0 ? (
                 <p className="text-center text-gray-500 dark:text-gray-400 p-16">Seleziona o crea un motore sulla sinistra per visualizzare i dettagli e la cronologia.</p>
             ) : (
-                <AllEnginesTimeline 
-                    engines={engines} 
-                    onShowDetails={handleViewDetails} 
-                    onDeleteVersion={handleDeleteVersionConfirm} 
-                />
+                timelineView === 'list' ? (
+                    <AllEnginesTimeline 
+                        engines={engines} 
+                        onShowDetails={handleViewDetails} 
+                        onDeleteVersion={handleDeleteVersionConfirm} 
+                        setTimelineView={setTimelineView}
+                    />
+                ) : (
+                    <GanttTimeline engines={engines} />
+                )
             )}
           </div>
         )}
