@@ -241,52 +241,54 @@ const DeleteConfirmModal = ({ onConfirm, onCancel, message }) => {
 };
 
 // NUOVO COMPONENTE PER LA VISTA GRAFICA (TIMELINE GANTT)
-const GanttTimeline = ({ engines }) => {
+const GanttTimeline = ({ engines, onShowDetails }) => {
+    const [filterEngineId, setFilterEngineId] = useState('all');
+
     // 1. Prepara i dati della timeline
     const timelineData = useMemo(() => {
         let allVersions = [];
-        engines.forEach(engine => {
-            engine.versions.forEach((version, index) => {
-                const startString = version.validityDate || version.timestamp.split('T')[0];
-                let endString = null;
-                
-                // Determina la data di fine: è la data di validità della versione successiva
-                if (index < engine.versions.length - 1) {
-                    endString = engine.versions[index + 1].validityDate || engine.versions[index + 1].timestamp.split('T')[0];
-                }
+        const filteredEngines = filterEngineId === 'all' 
+            ? engines 
+            : engines.filter(e => e.id === filterEngineId);
 
-                // Determina lo stato: Attuale se è l'ultima versione e non ha una data di fine definita
-                const isCurrent = index === engine.versions.length - 1 && !endString;
+        filteredEngines.forEach(engine => {
+            engine.versions.forEach((version, index) => {
+                // La data di riferimento per il posizionamento è la Data di Validità, con fallback al Timestamp
+                const startString = version.validityDate || version.timestamp.split('T')[0];
+                
+                // Trova la versione precedente (necessaria per il confronto nel modale)
+                const previousVersion = index > 0 ? engine.versions[index - 1] : null;
 
                 allVersions.push({
                     engineId: engine.id,
                     engineName: engine.name,
                     versionIndex: index + 1,
-                    start: new Date(startString),
-                    end: endString ? new Date(endString) : (isCurrent ? new Date() : null), // Se attuale, termina oggi
-                    isCurrent,
+                    date: new Date(startString), // Usiamo solo la data di inizio/validità come punto di evento
                     validityDate: version.validityDate,
                     timestamp: version.timestamp,
+                    currentVersion: version, // Passiamo la versione corrente completa
+                    previousVersion: previousVersion, // Passiamo la versione precedente completa
                 });
             });
         });
 
         // 2. Calcola l'intervallo temporale
-        const dates = allVersions.flatMap(v => [v.start, v.end]).filter(Boolean);
+        const dates = allVersions.map(v => v.date).filter(Boolean);
         if (dates.length === 0) return { versions: [], minDate: new Date(), maxDate: new Date() };
 
         const minDate = new Date(Math.min(...dates));
         const maxDate = new Date(Math.max(...dates));
         
-        // Aggiunge un po' di padding alla fine per la versione corrente
+        // Aggiunge padding di un mese prima e dopo
+        minDate.setDate(minDate.getDate() - 30);
         maxDate.setDate(maxDate.getDate() + 30); 
 
         return { versions: allVersions, minDate, maxDate };
-    }, [engines]);
+    }, [engines, filterEngineId]);
 
     const { versions, minDate, maxDate } = timelineData;
     
-    // Raggruppa i motori per il layout verticale
+    // Raggruppa i motori per il layout verticale, usando solo quelli filtrati
     const uniqueEngineIds = useMemo(() => [...new Set(versions.map(v => v.engineId))], [versions]);
     
     // Giorni totali nell'intervallo (per la larghezza del grafico)
@@ -311,74 +313,105 @@ const GanttTimeline = ({ engines }) => {
         return markers;
     }, [minDate, maxDate]);
 
-    // Funzione helper per calcolare posizione e larghezza
-    const calculatePositionAndWidth = (start, end) => {
-        const startMs = start.getTime();
-        const endMs = end ? end.getTime() : new Date().getTime(); // Se end è nullo (versione corrente)
-        
-        const offsetMs = startMs - minDate.getTime();
-        const durationMs = endMs - startMs;
-        
+    // Funzione helper per calcolare posizione
+    const calculatePosition = (date) => {
+        const dateMs = date.getTime();
+        const offsetMs = dateMs - minDate.getTime();
         const offsetDays = offsetMs / (1000 * 60 * 60 * 24);
-        const durationDays = durationMs / (1000 * 60 * 60 * 24);
         
-        const left = offsetDays * daysPerPixel;
-        const width = durationDays * daysPerPixel;
-        
-        return { left, width };
+        return offsetDays * daysPerPixel;
     };
+
+    // Mapping per tracciare le righe: raggruppa le versioni per EngineId
+    const versionsByEngineId = useMemo(() => {
+        const map = new Map();
+        versions.forEach(v => {
+            if (!map.has(v.engineId)) {
+                map.set(v.engineId, []);
+            }
+            map.get(v.engineId).push(v);
+        });
+        return map;
+    }, [versions]);
+
 
     return (
         <div className="space-y-4 mt-8">
-            <h3 className="text-2xl font-bold mb-4">Timeline Grafica (Gantt)</h3>
+            <h3 className="text-2xl font-bold mb-4">Timeline Grafica (Punti di Modifica)</h3>
+            
+            {/* Filtro Motore */}
+            <div className="flex flex-wrap gap-4 items-center mb-4 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg shadow-inner">
+                <label className="text-sm font-semibold flex-shrink-0">Filtra per motore:</label>
+                <select onChange={(e) => setFilterEngineId(e.target.value)} 
+                        value={filterEngineId} 
+                        className="p-2 rounded-lg bg-white dark:bg-gray-900 border dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="all">Tutti i motori</option>
+                    {engines.map(engine => <option key={engine.id} value={engine.id}>{engine.name}</option>)}
+                </select>
+            </div>
             
             {versions.length === 0 ? (
                 <p className="text-center text-gray-500 dark:text-gray-400 p-8 border-2 border-dashed rounded-lg">Nessun dato di versione con date per la visualizzazione Gantt.</p>
             ) : (
                 <div className="overflow-x-auto overflow-y-auto max-h-[60vh] bg-white dark:bg-gray-700 p-4 rounded-lg shadow-xl border">
-                    <div className="flex flex-col relative" style={{ width: `${chartWidth + 300}px` }}> 
+                    <div className="flex flex-col relative" style={{ width: `${chartWidth + 150}px`, minWidth: '100%' }}> 
                         
                         {/* Riga delle Etichette Temporali */}
                         <div className="h-10 relative border-b border-gray-400 dark:border-gray-600">
-                            {timeMarkers.map((date, i) => (
-                                <div 
-                                    key={i} 
-                                    className="absolute top-0 h-full border-l border-gray-300 dark:border-gray-500 text-xs text-gray-500 dark:text-gray-400 -ml-px flex items-end pb-1 whitespace-nowrap"
-                                    style={{ left: calculatePositionAndWidth(date, date).left + 'px' }}
-                                >
-                                    {date.toLocaleDateString('it-IT', { year: 'numeric', month: 'short', day: 'numeric' })}
-                                </div>
-                            ))}
+                            {timeMarkers.map((date, i) => {
+                                const left = calculatePosition(date);
+                                return (
+                                    <div 
+                                        key={i} 
+                                        className="absolute top-0 h-full border-l border-gray-300 dark:border-gray-500 text-xs text-gray-500 dark:text-gray-400 -ml-px flex items-end pb-1 whitespace-nowrap"
+                                        style={{ left: left + 'px' }}
+                                    >
+                                        {date.toLocaleDateString('it-IT', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                    </div>
+                                );
+                            })}
                         </div>
 
-                        {/* Contenitore delle Barre della Timeline */}
-                        <div className="relative pt-4 space-y-6 min-h-[300px]">
-                            {uniqueEngineIds.map((engineId, rowIndex) => {
+                        {/* Contenitore dei Punti Evento */}
+                        <div className="relative pt-4 space-y-8 min-h-[300px]">
+                            {uniqueEngineIds.map((engineId) => {
                                 const engineName = engines.find(e => e.id === engineId)?.name;
-                                const engineVersions = versions.filter(v => v.engineId === engineId);
+                                const engineVersions = versionsByEngineId.get(engineId) || [];
                                 
                                 return (
-                                    <div key={engineId} className="relative h-8 flex items-center border-b border-gray-100 dark:border-gray-600">
+                                    <div key={engineId} className="relative h-6 flex items-center border-b border-gray-100 dark:border-gray-600">
                                         {/* Etichetta Motore (Fissa a sinistra, coperta dallo scroll) */}
-                                        <div className="absolute left-0 w-64 bg-gray-50 dark:bg-gray-800 p-1 rounded-r-lg text-sm font-semibold truncate z-10 -ml-4 shadow-md">
+                                        <div className="absolute -left-4 w-40 bg-gray-50 dark:bg-gray-800 p-1 rounded-r-lg text-sm font-semibold truncate z-10 shadow-md flex-shrink-0">
                                             {engineName}
                                         </div>
 
-                                        {/* Barre di Versione */}
-                                        <div className="relative flex-1" style={{ marginLeft: '120px' }}>
-                                            {engineVersions.map((v, vIndex) => {
-                                                const { left, width } = calculatePositionAndWidth(v.start, v.end);
+                                        {/* Punti Versione */}
+                                        <div className="relative flex-1 h-full" style={{ marginLeft: '120px' }}>
+                                            {engineVersions.map((v) => {
+                                                const left = calculatePosition(v.date) - 120; // Sottrai il margine sinistro
                                                 const colorClass = getEngineColor(v.engineId);
-                                                const hoverText = `V${v.versionIndex} | Valido dal: ${v.validityDate || new Date(v.timestamp).toLocaleDateString()} ${v.isCurrent ? '(Attuale)' : v.end ? `fino al ${v.end.toLocaleDateString()}` : ''}`;
+                                                
+                                                // La versione iniziale non ha una versione precedente con cui confrontare i dettagli
+                                                const isInitialVersion = v.previousVersion === null;
+                                                const tooltipText = `V${v.versionIndex} (${v.validityDate || new Date(v.timestamp).toLocaleDateString()}) - ${isInitialVersion ? 'Versione Iniziale' : 'Clicca per Dettagli'}`;
                                                 
                                                 return (
                                                     <div
                                                         key={v.versionIndex}
-                                                        className={`absolute h-6 rounded-lg text-white text-xs font-medium cursor-pointer transition-transform duration-200 hover:scale-y-110 flex items-center justify-center whitespace-nowrap overflow-hidden ${colorClass} shadow-md`}
-                                                        style={{ left: `${left}px`, width: `${width > 5 ? width : 5}px`, opacity: 0.8 }}
-                                                        title={hoverText}
+                                                        className={`absolute w-4 h-4 rounded-full cursor-pointer transition-transform duration-100 hover:scale-150 ring-2 ring-white dark:ring-gray-800 ${colorClass} shadow-lg`}
+                                                        style={{ 
+                                                            left: `${left}px`, 
+                                                            top: '50%', 
+                                                            transform: 'translateY(-50%)', 
+                                                            zIndex: 20 
+                                                        }}
+                                                        title={tooltipText}
+                                                        onClick={() => {
+                                                            if (!isInitialVersion) {
+                                                                onShowDetails(v.currentVersion, v.previousVersion);
+                                                            }
+                                                        }}
                                                     >
-                                                        {width > 60 && `V${v.versionIndex} (${v.validityDate || 'Iniziale'})`}
                                                     </div>
                                                 );
                                             })}
@@ -1608,7 +1641,10 @@ const App = () => {
                         setTimelineView={setTimelineView}
                     />
                 ) : (
-                    <GanttTimeline engines={engines} />
+                    <GanttTimeline 
+                        engines={engines} 
+                        onShowDetails={handleViewDetails} 
+                    />
                 )
             )}
           </div>
