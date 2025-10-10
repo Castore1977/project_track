@@ -521,6 +521,7 @@ const EngineDetails = ({ engines, currentEngineId, statisticalEngines, setStatis
             const simulatedPath = `C:/Documenti/Risorse/${fileName}`; 
             
             setter(index, 'name', fileName);
+            // Salva il percorso locale simulato
             setter(index, 'url', simulatedPath); 
         }
         // Resetta il valore dell'input per permettere la rislezione dello stesso file
@@ -704,7 +705,8 @@ const EngineDetails = ({ engines, currentEngineId, statisticalEngines, setStatis
                             if (!doc.url.startsWith('http') && !doc.url.startsWith('https')) { // Se non è un URL web, blocca
                                 e.preventDefault();
                                 console.warn(`Accesso bloccato: Non è possibile aprire file locali (${doc.url}) a causa delle restrizioni di sicurezza del browser.`);
-                                alert(`Attenzione! Non è possibile aprire file locali (${doc.url}) a causa delle restrizioni di sicurezza del browser. Cliccando "Apri" funziona solo per gli URL web.`);
+                                // Rimosso alert() e sostituito con showTemporaryMessage
+                                showTemporaryMessage(`Accesso bloccato: Non è possibile aprire file locali (${doc.url}) a causa delle restrizioni di sicurezza del browser.`, 'error');
                             }
                         }}
                         className={`py-1 px-3 rounded-lg text-sm flex-shrink-0 transition-colors shadow-sm font-bold ${doc.url.startsWith('http') || doc.url.startsWith('https') ? 'bg-indigo-500 hover:bg-indigo-600 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-gray-100 cursor-default'}`}
@@ -871,23 +873,26 @@ const App = () => {
         return;
     }
 
-    const lastVersionTimestamp = currentEngine.versions[currentEngine.versions.length - 1].timestamp;
-    const lastVersionDate = new Date(lastVersionTimestamp).toISOString().split('T')[0];
+    const latestVersion = currentEngine.versions[currentEngine.versions.length - 1];
+    // --- INIZIO MODIFICA CRITICA: Usa validityDate per il controllo ---
+    // Recupera la Data di Validità, altrimenti usa il Timestamp come fallback
+    const lastVersionDateString = latestVersion.validityDate || latestVersion.timestamp.split('T')[0];
+    const lastVersionDate = new Date(lastVersionDateString);
 
     // 1. Validazione della Data di validità (solo se trackChanges è true)
     if (trackChanges && changeValidityDate) {
         const validityDate = new Date(changeValidityDate);
-        const lastModDate = new Date(lastVersionTimestamp);
         
-        // Confronto solo per la data
+        // Confronto solo per la data, ignorando l'ora del salvataggio attuale
         const validityDay = new Date(validityDate.toDateString());
-        const lastModDay = new Date(lastModDate.toDateString());
+        const lastModDay = new Date(lastVersionDate.toDateString());
 
         if (validityDay <= lastModDay) {
-            showTemporaryMessage(`La data di validità (${changeValidityDate}) deve essere SUCCESSIVA all'ultima data di modifica/validità registrata (${lastVersionDate}).`, 'error');
+            showTemporaryMessage(`La data di validità (${changeValidityDate}) deve essere SUCCESSIVA all'ultima data di VALIDITÀ registrata (${lastVersionDateString}).`, 'error');
             return;
         }
     }
+    // --- FINE MODIFICA CRITICA ---
     
     const newEngineData = {
         statisticalEngines,
@@ -917,6 +922,7 @@ const App = () => {
           const latestVersion = updatedVersions[updatedVersions.length - 1];
           if (latestVersion) {
             latestVersion.data = newEngineData;
+            // Aggiorna la validityDate anche nella modalità senza tracciamento, se fornita
             if (changeValidityDate) {
               latestVersion.validityDate = changeValidityDate;
             }
